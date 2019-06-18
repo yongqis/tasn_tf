@@ -9,11 +9,11 @@ def base_net():
     pass
 
 
-def trilinear_att():
+def trilinear_op():
     pass
 
 
-def att_sample():
+def attetion_sample():
     pass
 
 
