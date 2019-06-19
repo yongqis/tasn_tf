@@ -110,5 +110,6 @@ venv.bak/
 # IntelliJ project files
 .idea
 *.iml
+kjl.py
 out
 gen
