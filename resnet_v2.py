@@ -5,11 +5,13 @@ from __future__ import division
 from __future__ import print_function
 import collections
 import tensorflow as tf
-slim = tf.contrib.slim
+# slim = tf.contrib.slim
 layers = tf.layers
 
-shortcut_type = 'B'
+
 pass_depth = 64
+is_training = False
+shortcut_type = 'B'
 
 
 class Block(collections.namedtuple('Block', ['unit_num_list', 'out_depth', 'block_type'])):
@@ -92,7 +94,7 @@ def basicblock(inputs, out_depth, stride, scope, preact_type):
         #     residual_1 = slim.max_pool2d(residual_1, [1, 1], stride=stride, scope='conv1_stride')
         bn_2 = layers.batch_normalization(conv_1)
         act_2 = tf.nn.relu(bn_2)
-        conv_2 = layers.conv2d(act_2, out_depth, [3, 3], stride=[1, 1], padding='same')
+        conv_2 = layers.conv2d(act_2, out_depth, [3, 3], strides=[1, 1], padding='same')
 
         # 3、直连支路--考虑shape一致 按照imagenet的B策略 若图片像素低时，使用A策略
         # depth_in = slim.utils.last_dimension(shortcut_input.get_shape(), min_rank=4)
@@ -115,25 +117,30 @@ def make_layer(features, block_fn, depths, count, stride, scope, preact_type=Non
     return features
 
 
-def resnet_v2(inputs, layer_num, num_classes, is_training, sc_type='B'):
-    global pass_depth, shortcut_type
-    cfg = {
-        18: Block([2, 2, 2, 2], 512, basicblock),
-        34: Block([3, 4, 6, 3], 512, basicblock),
-        50: Block([3, 4, 6, 3], 2048, bottleneck),
-        101: Block([3, 4, 23, 3], 2048, bottleneck),
-        152: Block([3, 3, 36, 3], 2048, bottleneck),
-        200: Block([3, 24, 36, 3], 2048, bottleneck)
-    }
+cfg = {
+    18: Block([2, 2, 2, 2], 512, basicblock),
+    34: Block([3, 4, 6, 3], 512, basicblock),
+    50: Block([3, 4, 6, 3], 2048, bottleneck),
+    101: Block([3, 4, 23, 3], 2048, bottleneck),
+    152: Block([3, 3, 36, 3], 2048, bottleneck),
+    200: Block([3, 24, 36, 3], 2048, bottleneck)
+}
+
+
+def resnet_v2(inputs, layer_num, num_classes, training, sc_type='B'):
+    global pass_depth, shortcut_type, is_training
+    pass_depth = 64
+    is_training = training
+    shortcut_type = sc_type
+
     block_fn = cfg[layer_num].block_type
     final_depth = cfg[layer_num].out_depth
     block_num = cfg[layer_num].unit_num_list
-    pass_depth = 64
-    shortcut_type = sc_type
+
     with tf.variable_scope('resnet_%d_v2' % layer_num):
         # 顶层
         net = layers.conv2d(inputs, filters=64, kernel_size=[7, 7], strides=[2, 2], padding='same', name='conv1')
-        net = layers.batch_normalization(net)
+        net = layers.batch_normalization(net, training=is_training)
         net = tf.nn.relu(net)
         net = layers.max_pooling2d(net, pool_size=[3, 3], strides=[2, 2], padding='valid', name='pool1')
         # 中间层-残差
@@ -142,7 +149,7 @@ def resnet_v2(inputs, layer_num, num_classes, is_training, sc_type='B'):
         net = make_layer(net, block_fn, 256, block_num[2], 2, scope=3)
         net = make_layer(net, block_fn, 512, block_num[3], 2, scope=4)
         # 底层
-        net = layers.batch_normalization(net)
+        net = layers.batch_normalization(net, training=is_training)
         net = tf.nn.relu(net)
         net = tf.reduce_mean(net, [1, 2], name='global_avg', keep_dims=False)
         # 输出层
