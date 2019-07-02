@@ -366,3 +366,7 @@ def tasn(features, labels, mode, params):
         eval_metric_ops=eval_metric_ops,
         export_outputs=export_outputs
     )
+
+
+if __name__ == '__main__':
+    tasn()
