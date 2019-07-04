@@ -168,14 +168,14 @@ def resnet_v2(inputs, layer_num, num_classes, training, sc_type='B'):
         # 中间层-残差  注意：第一个模块不使用预激活方法
         with tf.variable_scope('mid'):
             block1 = make_module(top_pool, block_fn, 64, block_num[0], 1, scope=1, preact_type='no_preact')
-            block2 = make_module(block1, block_fn, 128, block_num[1], 2, scope=2)
+            block2 = make_module(block1, block_fn, 128, block_num[1], 1, scope=2)
             block3 = make_module(block2, block_fn, 256, block_num[2], 2, scope=3)
-            block4 = make_module(block3, block_fn, 512, block_num[3], 2, scope=4)
+            block4 = make_module(block3, block_fn, 512, block_num[3], 1, scope=4)
         # 底层
         with tf.variable_scope('bottom'):
             last_bn = layers.batch_normalization(block4, training=is_training)
             last_act = tf.nn.relu(last_bn)
-            last_pool = tf.reduce_mean(last_act, [1, 2], name='global_avg', keep_dims=False)
+            last_pool = tf.reduce_mean(last_act, [1, 2], name='global_avg', keepdims=False)
         # 输出层
         with tf.variable_scope('output'):
             pred_logits = layers.dense(last_pool, num_classes, name='logits')

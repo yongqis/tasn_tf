@@ -305,66 +305,47 @@ def tasn(features, labels, mode, params):
     # 构建网络模型
     _, features_maps, map_depths, logits = att_net(features, params.pre_layer_num, params.num_classes, is_training)
 
-    attention_maps = trilinear(features_maps)
-    struct_map, detail_map = avg_and_sample(attention_maps, map_depths, image_size, batch_size)
-    batch_sample_struct = attention_sample(features, struct_map, params.image_size, batch_size, scale)
-    batch_sample = batch_sample_struct
-    if mode == tf.estimator.ModeKeys.TRAIN:
-        batch_sample_detail = attention_sample(features, detail_map, params.image_size, batch_size, scale)
-        batch_sample = tf.concat([batch_sample_detail, batch_sample_struct], axis=0)
+    # attention_maps = trilinear(features_maps)
+    # struct_map, detail_map = avg_and_sample(attention_maps, map_depths, image_size, batch_size)
+    # batch_sample_struct = attention_sample(features, struct_map, params.image_size, batch_size, scale)
+    # batch_sample = batch_sample_struct
+    # if mode == tf.estimator.ModeKeys.TRAIN:
+    #     batch_sample_detail = attention_sample(features, detail_map, params.image_size, batch_size, scale)
+    #     batch_sample = tf.concat([batch_sample_detail, batch_sample_struct], axis=0)
+    #
+    # pre_dict = part_master_net(batch_sample, params.main_layer_num, params.num_classes, is_training)
+    # pred = tf.nn.softmax(pre_dict['master_logits'])
 
-    pre_dict = part_master_net(batch_sample, params.main_layer_num, params.num_classes, is_training)
-    pred = tf.nn.softmax(pre_dict['master_logits'])
-    # exported_output = [tf.identity(pred, name='pred_score')]
-    # export_outputs = {
-    #     tf.saved_model.signature_constants.PREDICT_METHOD_NAME:
-    #         tf.estimator.export.PredictOutput(exported_output)
-    # }
     # 反向传播
     if mode == tf.estimator.ModeKeys.TRAIN:
-        # 加载参数
-        # if params.fine_tune_checkpoint:
-        #     # 想要获得的参数map None为全部变量，且包括global_step
-        #     asg_map = util.restore_map(include_scope_list=None)
-        #     # ckpt文件中可以对应上的参数map
-        #     available_var_map = util.get_variables_available_in_checkpoint(asg_map, params.fine_tune_checkpoint)
-        #     # 此条语句会override tf.global_variables_initializer()
-        #     tf.train.init_from_checkpoint(params.fine_tune_checkpoint, available_var_map)
         # 损失函数
         # 1.att特征提取网络的损失
         att_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=labels, logits=logits)
         att_loss = tf.reduce_mean(att_loss)
         # 2.distill预测网络的损失
-        distill_part_logits = pre_dict['distill_part_logits']
-        distill_part_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=labels, logits=distill_part_logits)
-        distill_part_loss = tf.reduce_mean(distill_part_loss)
-
-        distill_master_logits = pre_dict['master_logits']
-        distill_master_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=labels, logits=distill_master_logits)
-        distill_master_loss = tf.reduce_mean(distill_master_loss)
-
-        soft_label = pre_dict['distill_soft_label']
-        distill_soft_loss = tf.nn.softmax_cross_entropy_with_logits_v2(labels=soft_label, logits=distill_master_logits)
-        distill_soft_loss = tf.reduce_mean(distill_soft_loss)
-
-        total_loss = tf.add_n([att_loss, distill_part_loss, distill_master_loss, distill_soft_loss])
+        # distill_part_logits = pre_dict['distill_part_logits']
+        # distill_part_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=labels, logits=distill_part_logits)
+        # distill_part_loss = tf.reduce_mean(distill_part_loss)
+        #
+        # distill_master_logits = pre_dict['master_logits']
+        # distill_master_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=labels, logits=distill_master_logits)
+        # distill_master_loss = tf.reduce_mean(distill_master_loss)
+        #
+        # soft_label = pre_dict['distill_soft_label']
+        # distill_soft_loss = tf.nn.softmax_cross_entropy_with_logits_v2(labels=soft_label, logits=distill_master_logits)
+        # distill_soft_loss = tf.reduce_mean(distill_soft_loss)
+        #
+        # total_loss = tf.add_n([att_loss, distill_part_loss, distill_master_loss, distill_soft_loss])
         # 优化器
         optimizer = tf.train.AdamOptimizer(learning_rate=params.learning_rate)
         # 优化操作
-        train_op = optimizer.minimize(loss=total_loss, global_step=tf.train.get_or_create_global_step())
+        train_op = optimizer.minimize(loss=att_loss, global_step=tf.train.get_or_create_global_step())
+        tf.group()
 
-    if mode == tf.estimator.ModeKeys.EVAL:
-        eval_metric_ops = {}
-
-    writer = tf.summary.FileWriter('/logs', tf.get_default_graph())
-    writer.close()
     return tf.estimator.EstimatorSpec(
         mode=mode,
-        predictions=pred,
         loss=total_loss,
-        train_op=train_op,
-        eval_metric_ops=eval_metric_ops,
-        export_outputs=export_outputs
+        train_op=train_op
     )
 
 

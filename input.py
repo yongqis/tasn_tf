@@ -22,7 +22,7 @@ def train_input(data_list, params):
     dataset = dataset.map(_parse_image)
     dataset = dataset.shuffle(params.buffer_size)  # whole dataset into the buffer
     dataset = dataset.repeat(params.num_epochs)  # repeat for multiple epochs
-    dataset = dataset.batch(params.batch_size)
+    dataset = dataset.batch(params.batch_size, drop_remainder=True)
     dataset = dataset.prefetch(1)  # make sure you always have one batch ready to serve
     iterator = dataset.make_one_shot_iterator()
     batch_image, batch_label = iterator.get_next()
