@@ -293,32 +293,39 @@ with tf.control_dependencies([update_op]):
 
 # tf.group()
 with tf.Session() as sess:
-    sess.run(tf.global_variables_initializer())
+    # sess.run(tf.global_variables_initializer())
     saver = tf.train.Saver()
     model_path = tf.train.latest_checkpoint(os.path.join(data_dir, 'save_model'))
     print('load ckpt from: %s.' % model_path)
     init = saver.restore(sess, save_path=model_path)
     while True:
         try:
-            # ————————————first_stage————————————————
+            # ————————————first_stage train————————————————
             # loss, step = sess.run([loss_tensor, global_step])  #dilate_features_maps, logits
             # print('step:', step)
             # print('loss:', loss)
             # print('-------------')
+            # ——————————————first_stage predict——————————————
+            lab, pred, step = sess.run([labels, logits, global_step])
+            print('————————————————')
+            for i in range(lab.shape[0]):
+                if lab[i] == np.argmax(pred[i]):
+                    print('label:', lab[i])
+                    print('pred:', np.argmax(pred[i]))
             # —————————————attention_map——————————————
-            im, s_map, d_map = sess.run([images, struct_map, detail_map])
-            for i in range(im.shape[0]):
-                h_map = s_map[i]
-                h_map = np.uint8(255 * h_map)
-                h_map = cv2.applyColorMap(h_map, cv2.COLORMAP_JET)
-
-                img = im[i]
-                img = (img + 1.0) * 255.0 / 2.0
-                img = np.uint8(1*img)
-
-                cover_im = cv2.addWeighted(img, 0.7, h_map, 0.3, 0)
-                plt.imshow(cover_im)
-                plt.show()
+            # im, s_map, d_map = sess.run([images, struct_map, detail_map])
+            # for i in range(im.shape[0]):
+            #     h_map = s_map[i]
+            #     h_map = np.uint8(255 * h_map)
+            #     h_map = cv2.applyColorMap(h_map, cv2.COLORMAP_JET)
+            #
+            #     img = im[i]
+            #     img = (img + 1.0) * 255.0 / 2.0
+            #     img = np.uint8(1*img)
+            #
+            #     cover_im = cv2.addWeighted(img, 0.7, h_map, 0.3, 0)
+            #     plt.imshow(cover_im)
+            #     plt.show()
             # —————————————sample visual———————————————
             # s_sample = attention_sample(im, s_map, params.sample_size/params.image_size)
             # ——————————————second_stage——————————————
