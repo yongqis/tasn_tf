@@ -284,48 +284,55 @@ total_loss = att_loss
 optimizer = tf.train.AdamOptimizer(learning_rate=params.learning_rate)
 global_step = tf.train.get_or_create_global_step()
 train_op = optimizer.minimize(total_loss, global_step=global_step)
-update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)  # BN操作以及滑动平均操作
 update_ops.append(train_op)
 update_op = tf.group(*update_ops)  # tf.group() 星号表达式
 # 指定依赖关系--先执行update_op节点的操作，才能执行train_tensor节点的操作
 with tf.control_dependencies([update_op]):
     loss_tensor = tf.identity(total_loss, name='loss_op')  # tf.identity()
 
-# tf.group()
 with tf.Session() as sess:
     # sess.run(tf.global_variables_initializer())
     saver = tf.train.Saver()
     model_path = tf.train.latest_checkpoint(os.path.join(data_dir, 'save_model'))
     print('load ckpt from: %s.' % model_path)
-    init = saver.restore(sess, save_path=model_path)
+    saver.restore(sess, save_path=model_path)
+    # var_list = tf.trainable_variables()
+    # print(var_list)
     while True:
         try:
             # ————————————first_stage train————————————————
-            # loss, step = sess.run([loss_tensor, global_step])  #dilate_features_maps, logits
-            # print('step:', step)
+            # loss, step = sess.run([loss_tensor, global_step])  # dilate_features_maps, logits
+            # print('global step:', step, end='|')
             # print('loss:', loss)
             # print('-------------')
+            # if step % 100 == 0:
+            #     saver.save(sess, save_path=os.path.join(data_dir, 'save_model/model.ckpt'), global_step=step)
             # ——————————————first_stage predict——————————————
-            lab, pred, step = sess.run([labels, logits, global_step])
-            print('————————————————')
-            for i in range(lab.shape[0]):
-                if lab[i] == np.argmax(pred[i]):
-                    print('label:', lab[i])
-                    print('pred:', np.argmax(pred[i]))
+            # lab, pred, step = sess.run([labels, logits, global_step])
+            # cnt=0
+            # print('————————————————')
+            # for i in range(lab.shape[0]):
+            #     if lab[i] == np.argmax(pred[i]):
+            #         print('label:', lab[i])
+            #         print('pred:', np.argmax(pred[i]))
+            #         cnt+=1
+            # print("true num:", cnt)
+            # print("acc:", cnt/32)
             # —————————————attention_map——————————————
-            # im, s_map, d_map = sess.run([images, struct_map, detail_map])
-            # for i in range(im.shape[0]):
-            #     h_map = s_map[i]
-            #     h_map = np.uint8(255 * h_map)
-            #     h_map = cv2.applyColorMap(h_map, cv2.COLORMAP_JET)
-            #
-            #     img = im[i]
-            #     img = (img + 1.0) * 255.0 / 2.0
-            #     img = np.uint8(1*img)
-            #
-            #     cover_im = cv2.addWeighted(img, 0.7, h_map, 0.3, 0)
-            #     plt.imshow(cover_im)
-            #     plt.show()
+            im, s_map, d_map = sess.run([images, struct_map, detail_map])
+            for i in range(im.shape[0]):
+                h_map = s_map[i]
+                h_map = np.uint8(255 * h_map)
+                h_map = cv2.applyColorMap(h_map, cv2.COLORMAP_JET)
+
+                img = im[i]
+                img = (img + 1.0) * 255.0 / 2.0
+                img = np.uint8(1*img)
+
+                cover_im = cv2.addWeighted(img, 0.7, h_map, 0.3, 0)
+                plt.imshow(cover_im)
+                plt.show()
             # —————————————sample visual———————————————
             # s_sample = attention_sample(im, s_map, params.sample_size/params.image_size)
             # ——————————————second_stage——————————————
