@@ -263,7 +263,7 @@ struct_map, detail_map = avg_and_sample(attention_maps, map_depths, params.image
 # 1.att特征提取网络的损失
 att_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=labels, logits=logits)
 att_loss = tf.reduce_mean(att_loss)
-
+acc = tf.metrics.accuracy(labels, tf.argmax(logits, axis=1))
 total_loss = att_loss
 # 2.distill预测网络的损失
 # distill_part_logits = pre_dict['distill_part_logits']
@@ -292,20 +292,23 @@ with tf.control_dependencies([update_op]):
     loss_tensor = tf.identity(total_loss, name='loss_op')  # tf.identity()
 
 with tf.Session() as sess:
-    # sess.run(tf.global_variables_initializer())
     saver = tf.train.Saver()
     model_path = tf.train.latest_checkpoint(os.path.join(data_dir, 'save_model'))
-    print('load ckpt from: %s.' % model_path)
-    saver.restore(sess, save_path=model_path)
+    if model_path:
+        print('load ckpt from: %s.' % model_path)
+        saver.restore(sess, save_path=model_path)
+    else:
+        sess.run(tf.global_variables_initializer())
+    sess.run(tf.local_variables_initializer())
     # var_list = tf.trainable_variables()
     # print(var_list)
     while True:
         try:
             # ————————————first_stage train————————————————
-            # loss, step = sess.run([loss_tensor, global_step])  # dilate_features_maps, logits
-            # print('global step:', step, end='|')
-            # print('loss:', loss)
-            # print('-------------')
+            loss, accuracy, step = sess.run([loss_tensor, acc, global_step])  # dilate_features_maps, logits
+            print('global step:', step, end='|')
+            print('loss:%.5f' % loss, end='|')
+            print('last step acc:%.5f, after update acc:%.5f' % accuracy)
             # if step % 100 == 0:
             #     saver.save(sess, save_path=os.path.join(data_dir, 'save_model/model.ckpt'), global_step=step)
             # ——————————————first_stage predict——————————————
@@ -320,19 +323,19 @@ with tf.Session() as sess:
             # print("true num:", cnt)
             # print("acc:", cnt/32)
             # —————————————attention_map——————————————
-            im, s_map, d_map = sess.run([images, struct_map, detail_map])
-            for i in range(im.shape[0]):
-                h_map = s_map[i]
-                h_map = np.uint8(255 * h_map)
-                h_map = cv2.applyColorMap(h_map, cv2.COLORMAP_JET)
-
-                img = im[i]
-                img = (img + 1.0) * 255.0 / 2.0
-                img = np.uint8(1*img)
-
-                cover_im = cv2.addWeighted(img, 0.7, h_map, 0.3, 0)
-                plt.imshow(cover_im)
-                plt.show()
+            # im, s_map, d_map = sess.run([images, struct_map, detail_map])
+            # for i in range(im.shape[0]):
+            #     h_map = s_map[i]
+            #     h_map = np.uint8(255 * h_map)
+            #     h_map = cv2.applyColorMap(h_map, cv2.COLORMAP_JET)
+            #
+            #     img = im[i]
+            #     img = (img + 1.0) * 255.0 / 2.0
+            #     img = np.uint8(1*img)
+            #
+            #     cover_im = cv2.addWeighted(img, 0.7, h_map, 0.3, 0)
+            #     plt.imshow(cover_im)
+            #     plt.show()
             # —————————————sample visual———————————————
             # s_sample = attention_sample(im, s_map, params.sample_size/params.image_size)
             # ——————————————second_stage——————————————
