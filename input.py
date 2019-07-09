@@ -16,6 +16,7 @@ def train_input(data_list, params):
         image_decoded = tf.image.decode_jpeg(image_string, channels=3)
         image_resized = tf.image.resize_images(image_decoded, [params.image_size, params.image_size])
         image_resized = (2.0 / 255.0) * image_resized - 1.0  # 0均值且
+        label = tf.cast(label, tf.int64)
         return image_resized, label
 
     dataset = tf.data.Dataset.from_tensor_slices(data_list)

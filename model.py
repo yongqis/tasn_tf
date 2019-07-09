@@ -1,9 +1,7 @@
-#!/usr/bin/env python
-# -*- coding:utf-8 -*-
-import tensorflow as tf
 import numpy as np
+import tensorflow as tf
 from resnet_v2 import resnet_v2
-import util.checkpoint_util as util
+
 layers = tf.layers
 
 
@@ -34,9 +32,9 @@ def att_net(inputs, layer_num, num_classes, training):
     :param layer_num: ResNet type
     :param num_classes:
     :param training: train or inference
-    :return: feature_maps, logits
+    :return: res_output, post2, finall_depth这是一个value不是tensor, logits
     """
-    with tf.variable_scope('Feature_Extractor'):
+    with tf.variable_scope('first_stage'):
         # 基础残差网络
         with tf.variable_scope('ResNet'):
             res_output, finall_depth, _, _ = resnet_v2(inputs, layer_num, num_classes, training)
@@ -59,7 +57,7 @@ def att_net(inputs, layer_num, num_classes, training):
         with tf.variable_scope('output'):
             net = layers.batch_normalization(post2, training=training)
             net = tf.nn.relu(net)
-            net = tf.reduce_mean(net, [1, 2], name='global_avg', keep_dims=False)
+            net = tf.reduce_mean(net, [1, 2], name='global_avg', keepdims=False)
             logits = layers.dense(net, num_classes, name='logits_layer')
 
     return res_output, post2, finall_depth, logits
@@ -102,7 +100,7 @@ def avg_and_sample(attention_maps, map_depths, input_size, batch_size):
     :return:
     """
     # 所有attention maps求和==求平均
-    struct_map = tf.reduce_sum(attention_maps, axis=-1, keepdims=True)
+    struct_map = tf.reduce_mean(attention_maps, axis=-1, keepdims=True)
     # 随机选取一个attention map
     map_list = []
     arr = np.random.randint(0, map_depths, size=batch_size)
@@ -121,131 +119,85 @@ def avg_and_sample(attention_maps, map_depths, input_size, batch_size):
     return struct_map, detail_map
 
 
-sample_x_x = 0
-sample_x_y = 0
-sample_y_x = 0
-sample_y_y = 0
-
-
-def attention_sample(image, att_map, att_size, batch_size, scale):
+def attention_sample(image, att_map, scale):
     """
 
-    :param image: tensor matrix
-    :param att_map: tensor matrix
+    :param image: numpy matrix
+    :param att_map: numpy matrix
     :param scale: out-size/att_size=scale 控制采样后输出的大小
     :return:
     """
-    reshape_im = tf.reshape(image, shape=[batch_size, att_size*att_size, -1])
-    att_size_h = att_size
-    att_size_w = att_size
+    batch_size = att_map.shape[0]
+    att_size_h = att_map.shape[1]
+    att_size_w = att_map.shape[2]
     out_size_h = int(att_size_h * scale)
     out_size_w = int(att_size_w * scale)
 
     # 将att_map视为联合分布律 求得边缘 概率密度函数/分布律
-    print(att_map)
-    map_x = tf.reduce_max(att_map, axis=1)  # 每列的最大值
-    map_y = tf.reduce_max(att_map, axis=2)  # 每行的最大值
-    # 归一化，使得边缘 概率分布函数 最大值为1
-    sum_x = tf.reduce_sum(map_x)
+    map_x = np.max(att_map, axis=1)  # 每列的最大值投影在x轴上
+    map_y = np.max(att_map, axis=2)  # 每行的最大值投影在y轴上
+    # # 归一化，使得边缘 概率分布函数 最大值为1
+    sum_x = np.sum(map_x, axis=-1, keepdims=True)
     map_x = map_x / sum_x
-
-    sum_y = tf.reduce_sum(map_y)
+    #
+    sum_y = np.sum(map_y, axis=-1, keepdims=True)
     map_y = map_y / sum_y
     # 修正概率分布函数的最大值为out_size 论文中有更复杂的实现过程
-    map_x = tf.multiply(map_x, out_size_w)
-    map_y = tf.multiply(map_y, out_size_h)
-    print(map_x)
+    map_x = map_x*out_size_w
+    map_y = map_y*out_size_h
 
     # 按batch处理
-    batch_sample_image = []
+    batch_sample_image = np.zeros(shape=[batch_size, out_size_h, out_size_w, 3])
     for b in range(batch_size):
-        print("batch epoch: ", b)
-        global sample_x_x
-        global sample_x_y
-        global sample_y_x
-        global sample_y_y
-        sample_x_x=0
-        sample_x_y=0
-        sample_y_x=0
-        sample_y_y=0
+        # print("batch_epoch:", b)
         # 求积分函数
         integral_x = []
         integral_y = []
         for i in range(att_size_w):
-            temp = 0.0 if i is 0 else integral_x[i-1]
-            integral_x.append(tf.add(temp, map_x[b, i]))
+            temp = 0 if i is 0 else integral_x[i-1]
+            integral_x.append(temp + map_x[b, i])
         for i in range(att_size_h):
-            temp = 0.0 if i is 0 else integral_y[i-1]
-            integral_y.append(tf.add(temp, map_y[b, i]))
+            temp = 0 if i is 0 else integral_y[i-1]
+            integral_y.append(temp + map_y[b, i])
+        integral_x = np.array(integral_x)
+        integral_y = np.array(integral_y)
+        # 求采样点的坐标
+        step_h = 1
+        i = 0
+        j = 0
+        coor_w = np.zeros(shape=[out_size_w], dtype=np.int32)
+        while i < out_size_h:
+            if integral_x[j] >= i*step_h:
+                coor_w[i] = round(j + (i * step_h - integral_x[j]) / (integral_x[j] - integral_x[j - 1]))
+                i += 1
+            else:
+                j += 1
+        step_w = 1
+        i = 0
+        j = 0
+        coor_h = np.zeros(shape=[out_size_h], dtype=np.int32)
+        while i < out_size_w:
+            if integral_y[j] >= i * step_w:
+                coor_h[i] = round(j + (i * step_w - integral_y[j]) / (integral_y[j] - integral_y[j - 1]))
+                i += 1
+            else:
+                j += 1
 
-        # x轴坐标
-        coor_x = []  # 保存 采样点的横坐标
-        step_x = att_size_w / out_size_w  # 逆函数均值采样步长
-        while sample_x_y < out_size_w:
-            # print(i)
-            def fn_1():
-                global sample_x_y
-                i = sample_x_y
-                j = sample_x_x
-                coor_x.append(tf.round(j + (i * step_x - integral_x[j]) / (integral_x[j] - integral_x[j - 1])))
-                sample_x_y += 1
-                return 1
+        sample_image = np.zeros(shape=[out_size_h, out_size_w, 3])
+        for i in range(out_size_h):
+            for j in range(out_size_w):
+                # print(coor_h[i], coor_w[j])
+                sample_image[i, j, :] = image[b, coor_h[i], coor_w[j], :]
+        # plt.imshow(sample_image)
+        # plt.show()
+        batch_sample_image[b] = sample_image
 
-            def fn_2():
-                global sample_x_x
-                sample_x_x += 1
-                return 1
-            _ = tf.cond(integral_x[sample_x_x] >= sample_x_y*step_x, true_fn=fn_1, false_fn=fn_2)
-
-        # y轴坐标
-        coor_y = []  # 保存zero-norm化之后的坐标
-        step_y = integral_y[att_size_h - 1] / out_size_h  # 逆函数均值采样步长
-        while sample_y_y < out_size_h:
-            # print(i)
-            def fn_1():
-                global sample_y_y
-                i = sample_y_y
-                j = sample_y_x
-                coor_y.append(tf.round(j + (i * step_x - integral_x[j]) / (integral_x[j] - integral_x[j - 1])))
-                sample_y_y += 1
-                return 1
-
-            def fn_2():
-                global sample_y_x
-                sample_y_x += 1
-                return 1
-
-            _ = tf.cond(integral_y[sample_y_x] >= sample_y_y * step_y, true_fn=fn_1, false_fn=fn_2)
-
-        # 确定采样点坐标
-        coor_x = tf.convert_to_tensor(coor_x)
-        coor_y = tf.convert_to_tensor(coor_y)
-        print(coor_y)
-        print(coor_x)
-        coor_x = tf.tile(tf.expand_dims(coor_x, axis=0), multiples=[out_size_h, 1])
-        coor_y = tf.tile(tf.expand_dims(coor_y, axis=-1), multiples=[1, out_size_w])
-        sample_coor = tf.stack([coor_x, coor_y], axis=-1)
-
-        # 获取对应的像素值
-        new_sample_coor = tf.cast(sample_coor[:, :, 0] + (sample_coor[:, :, 1] - 1) * out_size_w, tf.int32)
-        print(new_sample_coor)
-        new_sample_coor = tf.reshape(new_sample_coor, shape=[out_size_h * out_size_h])
-        sample_image = tf.gather(reshape_im[b], indices=new_sample_coor)
-        sample_image = tf.reshape(sample_image, shape=[out_size_h, out_size_w, 3])
-        # sample_image = np.zeros(shape=[out_size_h, out_size_w, 3])
-        # for i in range(out_size_h):
-        #     for j in range(out_size_w):
-        #         x, y = sample_coor[i, j, :]
-        #         tf.gather()
-        #         sample_image[i][j] = image[y, x, :]
-        batch_sample_image.append(sample_image)
-    batch_sample_image = tf.stack(batch_sample_image, axis=0)
     return batch_sample_image
 
 
 def part_master_net(inputs, layer_num, num_classes, training):
-    with tf.variable_scope('part_master'):
-        with tf.variable_scope('main_net'):
+    with tf.variable_scope('second_stage'):
+        with tf.variable_scope('ResNet'):
             res_block_out, finall_depth, global_pool, pred_logits = resnet_v2(inputs, layer_num, num_classes, training)
             predict_dict={
                 'res_block_output': res_block_out,
@@ -274,80 +226,17 @@ def part_master_net(inputs, layer_num, num_classes, training):
     return predict_dict
 
 
-def tasn(features, labels, mode, params):
+def variable_summaries():
     """
-    默认流程是predict, train中定义loss及反向传播，eval中定义评价指标
-    :param features:
-    :param labels:
-    :param mode:
-    :param params:
+    记录所有全局变量 卷积核，偏置项 batch_norm的mean, variance, beta gamma 的分布，均值，标准差
     :return:
     """
-
-    images = features
-    labels = tf.cast(labels, tf.int64)
-    # images = tf.reshape(images, [-1, params.image_size, params.image_size, 1])
-    assert images.shape[1:] == [params.image_size, params.image_size, 3], "{}".format(images.shape)
-    # 参数准备
-    is_training = False
-    batch_size = 1
-    image_size = params.image_size
-    sample_out_size = params.sample_out_size
-    scale = sample_out_size/image_size
-
-    if mode == tf.estimator.ModeKeys.TRAIN:
-        is_training = True
-        batch_size = params.train_batch
-    if mode == tf.estimator.ModeKeys.EVAL:
-        batch_size = params.eval_batch
-    # 确定几个目标值
-    pred, total_loss, train_op, export_outputs, eval_metric_ops = None, None, None, None, None
-    # 构建网络模型
-    _, features_maps, map_depths, logits = att_net(features, params.pre_layer_num, params.num_classes, is_training)
-
-    # attention_maps = trilinear(features_maps)
-    # struct_map, detail_map = avg_and_sample(attention_maps, map_depths, image_size, batch_size)
-    # batch_sample_struct = attention_sample(features, struct_map, params.image_size, batch_size, scale)
-    # batch_sample = batch_sample_struct
-    # if mode == tf.estimator.ModeKeys.TRAIN:
-    #     batch_sample_detail = attention_sample(features, detail_map, params.image_size, batch_size, scale)
-    #     batch_sample = tf.concat([batch_sample_detail, batch_sample_struct], axis=0)
-    #
-    # pre_dict = part_master_net(batch_sample, params.main_layer_num, params.num_classes, is_training)
-    # pred = tf.nn.softmax(pre_dict['master_logits'])
-
-    # 反向传播
-    if mode == tf.estimator.ModeKeys.TRAIN:
-        # 损失函数
-        # 1.att特征提取网络的损失
-        att_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=labels, logits=logits)
-        att_loss = tf.reduce_mean(att_loss)
-        # 2.distill预测网络的损失
-        # distill_part_logits = pre_dict['distill_part_logits']
-        # distill_part_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=labels, logits=distill_part_logits)
-        # distill_part_loss = tf.reduce_mean(distill_part_loss)
-        #
-        # distill_master_logits = pre_dict['master_logits']
-        # distill_master_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=labels, logits=distill_master_logits)
-        # distill_master_loss = tf.reduce_mean(distill_master_loss)
-        #
-        # soft_label = pre_dict['distill_soft_label']
-        # distill_soft_loss = tf.nn.softmax_cross_entropy_with_logits_v2(labels=soft_label, logits=distill_master_logits)
-        # distill_soft_loss = tf.reduce_mean(distill_soft_loss)
-        #
-        # total_loss = tf.add_n([att_loss, distill_part_loss, distill_master_loss, distill_soft_loss])
-        # 优化器
-        optimizer = tf.train.AdamOptimizer(learning_rate=params.learning_rate)
-        # 优化操作
-        train_op = optimizer.minimize(loss=att_loss, global_step=tf.train.get_or_create_global_step())
-        tf.group()
-
-    return tf.estimator.EstimatorSpec(
-        mode=mode,
-        loss=total_loss,
-        train_op=train_op
-    )
-
-
-if __name__ == '__main__':
-    tasn()
+    with tf.name_scope('summaries'):
+        val_list = tf.global_variables()
+        for var in val_list:
+            var = tf.cast(var, tf.float32)
+            tf.summary.histogram(var.name, var)
+            mean = tf.reduce_mean(var)
+            tf.summary.scalar('mean/'+var.name, mean)
+            stddev = tf.sqrt(tf.reduce_mean(tf.square(var-mean)))
+            tf.summary.scalar('stddev/'+var.name, stddev)

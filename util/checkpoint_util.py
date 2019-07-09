@@ -81,7 +81,7 @@ def restore_map(include_scope_list=None):
         nor `detection`.
     """
 
-    variables_to_restore = tf.global_variables()
+    variables_to_restore = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES) + tf.get_collection(tf.GraphKeys.SAVEABLE_OBJECTS)
     variables_to_restore.append(tf.train.get_or_create_global_step())
     include_patterns = include_scope_list
     feature_extractor_variables = filter_variables(variables_to_restore, include_patterns=include_patterns)
@@ -145,3 +145,13 @@ def filter_variables(var_list, include_patterns=None, exclude_patterns=None, reg
                 filtered_variables.append(var)
 
     return filtered_variables
+
+
+def differ_var():
+    trainable_var_list = tf.trainable_variables()
+    global_var_list = tf.global_variables()
+    res = []
+    for var in global_var_list:
+        if var not in trainable_var_list: # and 'batch_normalization' not in var.name:
+            res.append(var)
+    return res

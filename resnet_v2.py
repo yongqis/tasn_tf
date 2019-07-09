@@ -179,5 +179,4 @@ def resnet_v2(inputs, layer_num, num_classes, training, sc_type='B'):
         # 输出层
         with tf.variable_scope('output'):
             pred_logits = layers.dense(last_pool, num_classes, name='logits')
-
         return block4, final_depth, last_pool, pred_logits
