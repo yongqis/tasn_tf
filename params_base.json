@@ -1,5 +1,5 @@
 {
-    "is_training":true,
+    "is_training":false,
     "buffer_size": 500,
     "batch_size": 32,
     "num_epochs": 10,

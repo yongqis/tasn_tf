@@ -82,7 +82,7 @@ else:
 
 with tf.Session() as sess:
     saver = tf.train.Saver()  # 保存全部参数
-    # sess.run(tf.local_variables_initializer())
+    sess.run(tf.local_variables_initializer())
     model_path = tf.train.latest_checkpoint(os.path.join(data_dir, 'save_model'))
     if model_path:
         print('load ckpt from: %s.' % model_path)
@@ -94,19 +94,21 @@ with tf.Session() as sess:
 
     while True:
         try:
-            # ————————————first_stage train————————————————accuracy,, merged
-            loss, acc, summary, step = sess.run([loss_tensor, accuracy, merged, global_step])
-            print('global step:', step, end='|')
-            print('loss:%.5f' % loss, end='|')
-            print('acc:%.5f' % acc)
-            # if step % 500 == 0:
-            #     summary_writer.add_summary(summary, step)
-            # if step % 1000 == 0:
-            #     saver.save(sess, save_path=os.path.join(data_dir, 'save_model/model.ckpt'), global_step=step)
-
-            # ——————————————first_stage predict——————————————
-            # pred = sess.run([acc])
-            # print("acc:", pred[0])
+            if params.is_training:
+                # ————————————first_stage train————————————————accuracy,, merged
+                loss, acc, summary, step = sess.run([loss_tensor, accuracy, merged, global_step])
+                print('global step:', step, end='|')
+                print('loss:%.5f' % loss, end='|')
+                print('acc:%.5f' % acc)
+                if step % 500 == 0:
+                    summary_writer.add_summary(summary, step)
+                if step % 100 == 0:
+                    saver.save(sess, save_path=os.path.join(data_dir, 'save_model/model.ckpt'), global_step=step)
+                    break
+            else:
+                # ——————————————first_stage predict——————————————
+                pred = sess.run([accuracy])
+                print("acc:", pred[0])
             # —————————————attention_map——————————————
             # im, s_map, d_map = sess.run([images, struct_map, detail_map])
             # for i in range(im.shape[0]):
