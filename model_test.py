@@ -87,10 +87,11 @@ with tf.Session() as sess:
     if model_path:
         print('load ckpt from: %s.' % model_path)
         saver.restore(sess, save_path=model_path)
-    # else:
-    #     print('global_init')
-    #     sess.run(tf.global_variables_initializer())
-    # print(sess.run(var_list))
+        sess.run(tf.local_variables_initializer())
+    else:
+        print('global_init')
+        sess.run(tf.global_variables_initializer())
+
     while True:
         try:
             # ————————————first_stage train————————————————accuracy,, merged
