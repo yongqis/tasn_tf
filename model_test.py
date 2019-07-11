@@ -12,7 +12,7 @@ import util.checkpoint_util as ckpt
 layers = tf.layers
 
 params_path = './params_base.json'
-data_dir = "D:\\Picture\\Nestle\\Nestle_for_retrieval"
+data_dir = "/home/admins/workspace/syq/Nestle_for_retrieval"
 params = Params(params_path)
 
 # model
@@ -26,12 +26,14 @@ assert images.shape[1:] == [params.image_size, params.image_size, 3], "{}".forma
 res_feature_maps, dilate_features_maps, map_depths, logits = \
     model.att_net(images, params.first_layer_num, params.num_classes, params.is_training)
 
-attention_maps = model.trilinear(dilate_features_maps)
-struct_map, detail_map = model.avg_and_sample(attention_maps, map_depths, params.image_size, params.batch_size)
+# attention_maps = model.trilinear(dilate_features_maps)
+# struct_map, detail_map = model.avg_and_sample(attention_maps, map_depths, params.image_size, params.batch_size)
 
 # 损失函数
 # 1.att特征提取网络的损失
 with tf.name_scope('loss'):
+    pred = tf.nn.softmax(logits, axis=-1)
+    # cross_entropy = tf.reduce_mean()
     att_loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(labels=labels, logits=logits))
     tf.summary.scalar('mean_cross_entropy', att_loss)
 
@@ -55,13 +57,9 @@ total_loss = att_loss
 # distill_soft_loss = tf.reduce_mean(distill_soft_loss)
 #
 # total_loss = tf.add_n([att_loss, distill_part_loss, distill_master_loss, distill_soft_loss])
-# 优化器
+
 global_step = tf.train.get_or_create_global_step()
 
-ckpt_path = tf.train.latest_checkpoint(os.path.join(data_dir, 'save_model'))
-var_map = ckpt.restore_map()
-available_var_map = ckpt.get_variables_available_in_checkpoint(var_map, ckpt_path)
-tf.train.init_from_checkpoint(ckpt_path, available_var_map)
 # 优化器
 optimizer = tf.train.RMSPropOptimizer(learning_rate=params.learning_rate)
 # optimizer = tf.train.AdamOptimizer(learning_rate=params.learning_rate)
@@ -72,12 +70,12 @@ update_op = tf.group(*update_ops)  # tf.group() 星号表达式
 # 指定依赖关系--先执行update_op节点的操作，才能执行train_tensor节点的操作
 with tf.control_dependencies([update_op]):
     loss_tensor = tf.identity(total_loss, name='loss_op')  # tf.identity()
-model.variable_summaries()
+# model.variable_summaries()
 merged = tf.summary.merge_all()
+summary_writer = tf.summary.FileWriter(os.path.join(data_dir, 'save_model'), tf.get_default_graph())
 
 with tf.Session() as sess:
     saver = tf.train.Saver()  # 保存全部参数
-    summary_writer = tf.summary.FileWriter(os.path.join(data_dir, 'save_model'), sess.graph)
     model_path = tf.train.latest_checkpoint(os.path.join(data_dir, 'save_model'))
     if model_path:
         print('load ckpt from: %s.' % model_path)
@@ -85,18 +83,20 @@ with tf.Session() as sess:
         sess.run(tf.local_variables_initializer())
     else:
         print('global_init')
-        sess.run(tf.global_variables_initializer())
+    sess.run(tf.global_variables_initializer())
     # print(sess.run(var_list))
     while True:
         try:
-            # ————————————first_stage train————————————————
+            # ————————————first_stage train————————————————accuracy,, merged
             loss, acc, summary, step = sess.run([loss_tensor, accuracy, merged, global_step])
             print('global step:', step, end='|')
             print('loss:%.5f' % loss, end='|')
             print('acc:%.5f' % acc)
-            if step % 100 == 0:
-                saver.save(sess, save_path=os.path.join(data_dir, 'save_model/model.ckpt'), global_step=step)
+            if step % 500 == 0:
                 summary_writer.add_summary(summary, step)
+            if step % 1000 == 0:
+                saver.save(sess, save_path=os.path.join(data_dir, 'save_model/model.ckpt'), global_step=step)
+
             # ——————————————first_stage predict——————————————
             # pred, step = sess.run([accuracy, global_step])
             # # cnt = 0

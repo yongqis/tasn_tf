@@ -17,6 +17,7 @@ def train_input(data_list, params):
         image_resized = tf.image.resize_images(image_decoded, [params.image_size, params.image_size])
         image_resized = (2.0 / 255.0) * image_resized - 1.0  # 0均值且
         label = tf.cast(label, tf.int64)
+        label -= 1  # 类别向左偏移
         return image_resized, label
 
     dataset = tf.data.Dataset.from_tensor_slices(data_list)
