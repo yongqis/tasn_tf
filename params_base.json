@@ -2,7 +2,7 @@
     "is_training":true,
     "buffer_size": 500,
     "batch_size": 32,
-    "num_epochs": 50,
+    "num_epochs": 10,
 
     "image_size": 128,
     "first_layer_num":18,
