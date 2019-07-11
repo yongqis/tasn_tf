@@ -4,7 +4,7 @@ import os
 import argparse
 import tensorflow as tf
 from util.utils import Params, get_data
-from input import train_input
+from util.input import train_input
 from model import tasn
 
 parser = argparse.ArgumentParser()
