@@ -17,11 +17,18 @@ parser.add_argument('--data_dir', help='data directory and save model', default=
 args = parser.parse_args()
 
 data_dir = args.data_dir
+
 params_path = './params_base.json'
 params = Params(params_path)
 
+data_set = os.path.join(data_dir, 'query')
+if params.is_training:
+    data_set = os.path.join(data_dir, 'gallery')
+
+
 # model
-data_tuple = get_data(os.path.join(data_dir, 'query'), os.path.join(data_dir, "label_map.pbtxt"))
+data_tuple = get_data(data_set, os.path.join(data_dir, "label_map.pbtxt"))
+
 images, labels = train_input(data_tuple, params)
 
 assert images.shape[1:] == [params.image_size, params.image_size, 3], "{}".format(images.shape)
