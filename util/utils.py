@@ -1,6 +1,6 @@
 """General utility functions"""
 import os
-import cv2
+# import cv2
 import json
 import shutil
 import logging

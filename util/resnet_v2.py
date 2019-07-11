@@ -7,7 +7,6 @@ import collections
 import tensorflow as tf
 
 layers = tf.layers
-
 pass_depth = 64
 is_training = False
 shortcut_type = 'B'

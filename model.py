@@ -1,6 +1,7 @@
 import numpy as np
 import tensorflow as tf
-from resnet_v2 import resnet_v2
+import util.checkpoint_util as ckpt
+from util.resnet_v2 import resnet_v2
 
 layers = tf.layers
 
@@ -233,6 +234,7 @@ def variable_summaries():
     """
     with tf.name_scope('summaries'):
         val_list = tf.global_variables()
+        # val_list = ckpt.filter_variables(val_list, exclude_patterns='RMSProp')
         for var in val_list:
             var = tf.cast(var, tf.float32)
             tf.summary.histogram(var.name, var)
