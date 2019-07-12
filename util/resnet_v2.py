@@ -58,7 +58,7 @@ def bottleneck(inputs, in_depth, out_depth, stride, preact_type):
     pass
 
 
-def basicblock(inputs, out_depth, stride, scope, preact_type=None):
+def basicblock(inputs, out_depth, stride, scope, is_training, preact_type=None):
     """
     只针对18 34layers ResNet_V2的残差单元
     一、是否使用preact? 是否共用preact?
@@ -68,6 +68,7 @@ def basicblock(inputs, out_depth, stride, scope, preact_type=None):
     :param out_depth:
     :param stride:
     :param scope:
+    :param is_training:
     :param preact_type: 有三种可能的取值None/'no_preact'/'both_preact'，
     大部分情况取None值；第一次进入残差单元时，'no_preact'
     :return:
@@ -81,7 +82,7 @@ def basicblock(inputs, out_depth, stride, scope, preact_type=None):
             res_input = inputs
             shortcut_input = inputs
             if preact_type != 'no_preact':
-                bn_1 = layers.batch_normalization(inputs)
+                bn_1 = layers.batch_normalization(inputs, training=is_training)
                 act_1 = tf.nn.relu(bn_1)
                 res_input = act_1
                 if preact_type == 'both_preact':
@@ -92,7 +93,7 @@ def basicblock(inputs, out_depth, stride, scope, preact_type=None):
             # if stride != 1:
             #     # stride!=1时，pytorch和tf的same padding策略不同，此处安pytorch实现，先做conv再做pool
             #     residual_1 = slim.max_pool2d(residual_1, [1, 1], stride=stride, scope='conv1_stride')
-            bn_2 = layers.batch_normalization(conv_1)
+            bn_2 = layers.batch_normalization(conv_1, training=is_training)
             act_2 = tf.nn.relu(bn_2)
             conv_2 = layers.conv2d(act_2, out_depth, [3, 3], strides=[1, 1], padding='same')
         # 3、直连支路--考虑shape一致 按照imagenet的B策略 若图片像素低时，使用C策略
@@ -104,7 +105,7 @@ def basicblock(inputs, out_depth, stride, scope, preact_type=None):
         return output
 
 
-def make_module(features, block_fn, depths, count, stride, scope, preact_type='both_preact'):
+def make_module(features, block_fn, depths, count, stride, scope, is_training, preact_type='both_preact'):
     """
     本代码命名规则，残差函数称为残差单元，多个相同的残差单元堆叠 称为残差模块
     :param features: 输入的feature map, shape为[batch_size, height, width, channel]
@@ -113,6 +114,7 @@ def make_module(features, block_fn, depths, count, stride, scope, preact_type='b
     :param count: 当前残差单元堆叠个数，共同组成当前残差模块
     :param stride: 当前残差模块中第一次卷积操作的stride，其余卷积操作均默认为1
     :param scope: int类型，表示第几个残差模块
+    :param is_training:
     :param preact_type: 仅指示残差模块中第一个残差单元的预激活方式，其余残差单元使用默认值None
     :return:
     """
@@ -120,10 +122,10 @@ def make_module(features, block_fn, depths, count, stride, scope, preact_type='b
         return features
     with tf.variable_scope('block_module_%d' % scope):
         unit_scope = 'unit_1'
-        features = block_fn(features, depths, stride, unit_scope, preact_type)
+        features = block_fn(features, depths, stride, unit_scope, is_training, preact_type)
         for i in range(1, count):
             unit_scope = 'unit_%d' % (i+1)
-            features = block_fn(features, depths, 1, unit_scope)
+            features = block_fn(features, depths, 1, unit_scope, is_training)
     return features
 
 
@@ -166,10 +168,10 @@ def resnet_v2(inputs, layer_num, num_classes, training, sc_type='B'):
             top_pool = layers.max_pooling2d(top_act, pool_size=[3, 3], strides=[2, 2], padding='valid', name='pool1')
         # 中间层-残差  注意：第一个模块不使用预激活方法
         with tf.variable_scope('mid'):
-            block1 = make_module(top_pool, block_fn, 64, block_num[0], 1, scope=1, preact_type='no_preact')
-            block2 = make_module(block1, block_fn, 128, block_num[1], 1, scope=2)
-            block3 = make_module(block2, block_fn, 256, block_num[2], 2, scope=3)
-            block4 = make_module(block3, block_fn, 512, block_num[3], 1, scope=4)
+            block1 = make_module(top_pool, block_fn, 64, block_num[0], 1, scope=1, is_training=training, preact_type='no_preact')
+            block2 = make_module(block1, block_fn, 128, block_num[1], 1, scope=2, is_training=training)
+            block3 = make_module(block2, block_fn, 256, block_num[2], 2, scope=3, is_training=training)
+            block4 = make_module(block3, block_fn, 512, block_num[3], 1, scope=4, is_training=training)
         # 底层
         with tf.variable_scope('bottom'):
             last_bn = layers.batch_normalization(block4, training=is_training)

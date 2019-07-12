@@ -233,12 +233,11 @@ def variable_summaries():
     :return:
     """
     with tf.name_scope('summaries'):
-        val_list = tf.global_variables()
-        # val_list = ckpt.filter_variables(val_list, exclude_patterns='RMSProp')
-        for var in val_list:
-            var = tf.cast(var, tf.float32)
-            tf.summary.histogram(var.name, var)
-            mean = tf.reduce_mean(var)
-            tf.summary.scalar('mean/'+var.name, mean)
-            stddev = tf.sqrt(tf.reduce_mean(tf.square(var-mean)))
-            tf.summary.scalar('stddev/'+var.name, stddev)
+        for var in tf.global_variables():
+            if 'moving' in var.op.name:
+                var = tf.cast(var, tf.float32)
+                tf.summary.histogram(var.op.name, var)
+                mean = tf.reduce_mean(var)
+                tf.summary.scalar('mean/'+var.op.name, mean)
+                stddev = tf.sqrt(tf.reduce_mean(tf.square(var-mean)))
+                tf.summary.scalar('stddev/'+var.op.name, stddev)

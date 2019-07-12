@@ -3,9 +3,10 @@
 import os
 import argparse
 import tensorflow as tf
+import tensorflow_estimator as es
 from util.utils import Params, get_data
 from util.input import train_input
-from model import tasn
+
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--save_model_dir', help='directory to save and load model and summary.')
@@ -15,6 +16,10 @@ args = parser.parse_args()
 
 model_dir = args.save_model_dir
 model_params_path = args.params_path
+
+es.estimator.RunConfig()
+estimator = es.estimator.Estimator()
+es.estimator.train_and_evaluate()
 
 params = Params(model_params_path)
 runcfg = tf.estimator.RunConfig(

@@ -80,12 +80,13 @@ if params.is_training:
     # 指定依赖关系--先执行update_op节点的操作，才能执行train_tensor节点的操作
     with tf.control_dependencies([update_op]):
         loss_tensor = tf.identity(total_loss, name='loss_op')  # tf.identity()
-    # model.variable_summaries()
+    model.variable_summaries()
     merged = tf.summary.merge_all()
     summary_writer = tf.summary.FileWriter(os.path.join(data_dir, 'save_model'), tf.get_default_graph())
 
 else:
     accuracy = tf.metrics.accuracy(labels, predictions=tf.math.argmax(tf.nn.softmax(logits, -1),-1))
+
 
 with tf.Session() as sess:
     saver = tf.train.Saver()  # 保存全部参数
@@ -98,7 +99,6 @@ with tf.Session() as sess:
     else:
         print('global_init')
         sess.run(tf.global_variables_initializer())
-
     while True:
         try:
             if params.is_training:
@@ -109,9 +109,8 @@ with tf.Session() as sess:
                 print('acc:%.5f' % acc)
                 if step % 500 == 0:
                     summary_writer.add_summary(summary, step)
-                if step % 100 == 0:
+                if step % 1000 == 0:
                     saver.save(sess, save_path=os.path.join(data_dir, 'save_model/model.ckpt'), global_step=step)
-                    break
             else:
                 # ——————————————first_stage predict——————————————
                 pred = sess.run([accuracy])
