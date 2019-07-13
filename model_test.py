@@ -22,7 +22,7 @@ params_path = './params_base.json'
 params = Params(params_path)
 
 data_set = os.path.join(data_dir, 'query')
-if params.is_training:
+if params.is_training :
     data_set = os.path.join(data_dir, 'gallery')
 
 
@@ -32,14 +32,14 @@ data_tuple = get_data(data_set, os.path.join(data_dir, "label_map.pbtxt"))
 images, labels = train_input(data_tuple, params)
 
 assert images.shape[1:] == [params.image_size, params.image_size, 3], "{}".format(images.shape)
-
+tf.train.MomentumOptimizer
 
 # 构建网络模型
 res_feature_maps, dilate_features_maps, map_depths, logits = \
     model.att_net(images, params.first_layer_num, params.num_classes, params.is_training)
 
-# attention_maps = model.trilinear(dilate_features_maps)
-# struct_map, detail_map = model.avg_and_sample(attention_maps, map_depths, params.image_size, params.batch_size)
+attention_maps = model.trilinear(dilate_features_maps)
+struct_map, detail_map = model.avg_and_sample(attention_maps, map_depths, params.image_size, params.batch_size)
 if params.is_training:
     # 损失函数
     # 1.att特征提取网络的损失
@@ -51,7 +51,7 @@ if params.is_training:
         corrections = tf.equal(labels, tf.argmax(logits, 1))
         accuracy = tf.reduce_mean(tf.cast(corrections, tf.float32))
         tf.summary.scalar('accuracy', accuracy)
-
+        accuracys = tf.metrics.accuracy(labels, predictions=tf.math.argmax(tf.nn.softmax(logits, -1), -1))
     total_loss = att_loss
     # 2.distill预测网络的损失
     # distill_part_logits = pre_dict['distill_part_logits']
@@ -71,7 +71,8 @@ if params.is_training:
     global_step = tf.train.get_or_create_global_step()
 
     # 优化器
-    optimizer = tf.train.RMSPropOptimizer(learning_rate=params.learning_rate)
+    lr = tf.train.exponential_decay(params.learning_rate, global_step, 1000, 0.95, staircase=True)
+    optimizer = tf.train.RMSPropOptimizer(learning_rate=lr)
     # optimizer = tf.train.AdamOptimizer(learning_rate=params.learning_rate)
     train_op = optimizer.minimize(total_loss, global_step=global_step)
     update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)  # BN操作以及滑动平均操作
@@ -80,14 +81,15 @@ if params.is_training:
     # 指定依赖关系--先执行update_op节点的操作，才能执行train_tensor节点的操作
     with tf.control_dependencies([update_op]):
         loss_tensor = tf.identity(total_loss, name='loss_op')  # tf.identity()
-    model.variable_summaries()
-    merged = tf.summary.merge_all()
-    summary_writer = tf.summary.FileWriter(os.path.join(data_dir, 'save_model'), tf.get_default_graph())
-
 else:
+    # corrections = tf.equal(labels, tf.argmax(logits, 1))
+    # accuracy = tf.reduce_mean(tf.cast(corrections, tf.float32))
+    # tf.summary.scalar('accuracy', accuracy)
     accuracy = tf.metrics.accuracy(labels, predictions=tf.math.argmax(tf.nn.softmax(logits, -1),-1))
 
-
+model.variable_summaries()
+merged = tf.summary.merge_all()
+summary_writer = tf.summary.FileWriter(os.path.join(data_dir, 'save_model'), tf.get_default_graph())
 with tf.Session() as sess:
     saver = tf.train.Saver()  # 保存全部参数
     sess.run(tf.local_variables_initializer())
@@ -102,12 +104,13 @@ with tf.Session() as sess:
     while True:
         try:
             if params.is_training:
-                # ————————————first_stage train————————————————accuracy,, merged
-                loss, acc, summary, step = sess.run([loss_tensor, accuracy, merged, global_step])
+                # ————————————first_stage train————————————————accuracy,
+                step = sess.run(global_step)
+                loss, acc, summary = sess.run([loss_tensor, accuracy, merged])
                 print('global step:', step, end='|')
                 print('loss:%.5f' % loss, end='|')
                 print('acc:%.5f' % acc)
-                if step % 500 == 0:
+                if step % 1000 == 0:
                     summary_writer.add_summary(summary, step)
                 if step % 1000 == 0:
                     saver.save(sess, save_path=os.path.join(data_dir, 'save_model/model.ckpt'), global_step=step)
@@ -115,20 +118,24 @@ with tf.Session() as sess:
                 # ——————————————first_stage predict——————————————
                 pred = sess.run([accuracy])
                 print("acc:", pred[0])
-            # —————————————attention_map——————————————
-            # im, s_map, d_map = sess.run([images, struct_map, detail_map])
-            # for i in range(im.shape[0]):
-            #     h_map = s_map[i]
-            #     h_map = np.uint8(255 * h_map)
-            #     h_map = cv2.applyColorMap(h_map, cv2.COLORMAP_JET)
-            #
-            #     img = im[i]
-            #     img = (img + 1.0) * 255.0 / 2.0
-            #     img = np.uint8(1*img)
-            #
-            #     cover_im = cv2.addWeighted(img, 0.7, h_map, 0.3, 0)
-            #     plt.imshow(cover_im)
-            #     plt.show()
+                # —————————————attention_map——————————————
+                # im, s_map, d_map = sess.run([images, struct_map, detail_map])
+                # for i in range(im.shape[0]):
+                #     h_map = s_map[i]
+                #     h_map = np.uint8(255 * h_map)
+                #     h_map = cv2.applyColorMap(h_map, cv2.COLORMAP_JET)
+                #
+                #     img = im[i]
+                #     img = (img + 1.0) * 255.0 / 2.0
+                #     img = np.uint8(1*img)
+                #
+                #     cover_im = cv2.addWeighted(img, 0.7, h_map, 0.3, 0)
+                #     plt.figure()
+                #     plt.subplot(1,2,1)
+                #     plt.imshow(cover_im)
+                #     plt.subplot(1,2,2)
+                #     plt.imshow(img)
+                #     plt.show()
             # —————————————sample visual———————————————
             # s_sample = attention_sample(im, s_map, params.sample_size/params.image_size)
             # ——————————————second_stage——————————————

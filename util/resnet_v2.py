@@ -172,12 +172,12 @@ def resnet_v2(inputs, layer_num, num_classes, training, sc_type='B'):
             block2 = make_module(block1, block_fn, 128, block_num[1], 1, scope=2, is_training=training)
             block3 = make_module(block2, block_fn, 256, block_num[2], 2, scope=3, is_training=training)
             block4 = make_module(block3, block_fn, 512, block_num[3], 1, scope=4, is_training=training)
-        # 底层
-        with tf.variable_scope('bottom'):
-            last_bn = layers.batch_normalization(block4, training=is_training)
-            last_act = tf.nn.relu(last_bn)
-            last_pool = tf.reduce_mean(last_act, [1, 2], name='global_avg', keepdims=False)
-        # 输出层
-        with tf.variable_scope('output'):
-            pred_logits = layers.dense(last_pool, num_classes, name='logits')
-        return block4, final_depth, last_pool, pred_logits
+        # # 底层
+        # with tf.variable_scope('bottom'):
+        #     last_bn = layers.batch_normalization(block4, training=is_training)
+        #     last_act = tf.nn.relu(last_bn)
+        #     last_pool = tf.reduce_mean(last_act, [1, 2], name='global_avg', keepdims=False)
+        # # 输出层
+        # with tf.variable_scope('output'):
+        #     pred_logits = layers.dense(last_pool, num_classes, name='logits')
+        return block4, final_depth  # , last_pool, pred_logits

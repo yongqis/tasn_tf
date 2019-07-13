@@ -38,7 +38,7 @@ def att_net(inputs, layer_num, num_classes, training):
     with tf.variable_scope('first_stage'):
         # 基础残差网络
         with tf.variable_scope('ResNet'):
-            res_output, finall_depth, _, _ = resnet_v2(inputs, layer_num, num_classes, training)
+            res_output, finall_depth = resnet_v2(inputs, layer_num, num_classes, training)
         # 扩张卷积层
         with tf.variable_scope('dilation_layer'):
             post1_1 = layers.conv2d(res_output, filters=finall_depth, kernel_size=(3, 3),
@@ -234,7 +234,7 @@ def variable_summaries():
     """
     with tf.name_scope('summaries'):
         for var in tf.global_variables():
-            if 'moving' in var.op.name:
+            if 'RMS' not in var.op.name:
                 var = tf.cast(var, tf.float32)
                 tf.summary.histogram(var.op.name, var)
                 mean = tf.reduce_mean(var)

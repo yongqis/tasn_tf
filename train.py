@@ -4,8 +4,9 @@ import os
 import argparse
 import tensorflow as tf
 import tensorflow_estimator as es
+from model_fn import model_fn
 from util.utils import Params, get_data
-from util.input import train_input
+from util.input import train_input, eval_input
 
 
 parser = argparse.ArgumentParser()
@@ -16,12 +17,15 @@ args = parser.parse_args()
 
 model_dir = args.save_model_dir
 model_params_path = args.params_path
-
-es.estimator.RunConfig()
-estimator = es.estimator.Estimator()
-es.estimator.train_and_evaluate()
-
 params = Params(model_params_path)
+
+runcfg = es.estimator.RunConfig(model_dir=model_dir, save_summary_steps=1000, save_checkpoints_steps=1000, log_step_count_steps=100)
+estimator = es.estimator.Estimator(model_dir=None, config=runcfg, model_fn=model_fn, params=params)
+train_spec = es.estimator.TrainSpec()
+eval_spec = es.estimator.EvalSpec()
+es.estimator.train_and_evaluate(estimator, train_spec, eval_spec)
+
+# old version
 runcfg = tf.estimator.RunConfig(
     tf_random_seed=230,
     model_dir=model_dir,
