@@ -4,7 +4,7 @@ import os
 import cv2
 import argparse
 import numpy as np
-import model
+from model import SelfNetModel
 import tensorflow as tf
 from util.input import train_input
 from util.utils import Params, get_data
@@ -22,74 +22,51 @@ params_path = './params_base.json'
 params = Params(params_path)
 
 data_set = os.path.join(data_dir, 'query')
-if params.is_training :
+if params.is_training:
     data_set = os.path.join(data_dir, 'gallery')
 
-
-# model
 data_tuple = get_data(data_set, os.path.join(data_dir, "label_map.pbtxt"))
+images, labels = train_input(data_tuple, params.train_input)
 
-images, labels = train_input(data_tuple, params)
+net = SelfNetModel()
+loss = net.loss()
+global_step = tf.train.get_or_create_global_step()
+# 优化器
+lr = tf.train.exponential_decay(params.learning_rate, global_step, 1000, 0.95, staircase=True)
+optimizer = optimizer_factory[params.optimizer](learning_rate=lr, momentum=args.momentum)
+train_op = optimizer.minimize(loss, global_step=global_step)
+update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)  # BN操作以及滑动平均操作
+update_ops.append(train_op)
+update_op = tf.group(*update_ops)  # tf.group() 星号表达式
+# 指定依赖关系--先执行update_op节点的操作，才能执行train_tensor节点的操作
+with tf.control_dependencies([update_op]):
+    loss_tensor = tf.identity(loss, name='loss_op')  # tf.identity()
 
-assert images.shape[1:] == [params.image_size, params.image_size, 3], "{}".format(images.shape)
-tf.train.MomentumOptimizer
+# if params.is_training:
+#     # 损失函数
+#     # 1.att特征提取网络的损失
+#     with tf.name_scope('loss'):
+#         att_loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(labels=labels, logits=logits))
+#         tf.summary.scalar('mean_cross_entropy', att_loss)
+#
+#     with tf.name_scope('accuracy'):
+#         corrections = tf.equal(labels, tf.argmax(logits, 1))
+#         accuracy = tf.reduce_mean(tf.cast(corrections, tf.float32))
+#         tf.summary.scalar('accuracy', accuracy)
+#         accuracys = tf.metrics.accuracy(labels, predictions=tf.math.argmax(tf.nn.softmax(logits, -1), -1))
+#     total_loss = att_loss
 
-# 构建网络模型
-res_feature_maps, dilate_features_maps, map_depths, logits = \
-    model.att_net(images, params.first_layer_num, params.num_classes, params.is_training)
 
-attention_maps = model.trilinear(dilate_features_maps)
-struct_map, detail_map = model.avg_and_sample(attention_maps, map_depths, params.image_size, params.batch_size)
-if params.is_training:
-    # 损失函数
-    # 1.att特征提取网络的损失
-    with tf.name_scope('loss'):
-        att_loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(labels=labels, logits=logits))
-        tf.summary.scalar('mean_cross_entropy', att_loss)
 
-    with tf.name_scope('accuracy'):
-        corrections = tf.equal(labels, tf.argmax(logits, 1))
-        accuracy = tf.reduce_mean(tf.cast(corrections, tf.float32))
-        tf.summary.scalar('accuracy', accuracy)
-        accuracys = tf.metrics.accuracy(labels, predictions=tf.math.argmax(tf.nn.softmax(logits, -1), -1))
-    total_loss = att_loss
-    # 2.distill预测网络的损失
-    # distill_part_logits = pre_dict['distill_part_logits']
-    # distill_part_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=labels, logits=distill_part_logits)
-    # distill_part_loss = tf.reduce_mean(distill_part_loss)
-    #
-    # distill_master_logits = pre_dict['master_logits']
-    # distill_master_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=labels, logits=distill_master_logits)
-    # distill_master_loss = tf.reduce_mean(distill_master_loss)
-    #
-    # soft_label = pre_dict['distill_soft_label']
-    # distill_soft_loss = tf.nn.softmax_cross_entropy_with_logits_v2(labels=soft_label, logits=distill_master_logits)
-    # distill_soft_loss = tf.reduce_mean(distill_soft_loss)
-    #
-    # total_loss = tf.add_n([att_loss, distill_part_loss, distill_master_loss, distill_soft_loss])
-
-    global_step = tf.train.get_or_create_global_step()
-
-    # 优化器
-    lr = tf.train.exponential_decay(params.learning_rate, global_step, 1000, 0.95, staircase=True)
-    optimizer = tf.train.RMSPropOptimizer(learning_rate=lr)
-    # optimizer = tf.train.AdamOptimizer(learning_rate=params.learning_rate)
-    train_op = optimizer.minimize(total_loss, global_step=global_step)
-    update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)  # BN操作以及滑动平均操作
-    update_ops.append(train_op)
-    update_op = tf.group(*update_ops)  # tf.group() 星号表达式
-    # 指定依赖关系--先执行update_op节点的操作，才能执行train_tensor节点的操作
-    with tf.control_dependencies([update_op]):
-        loss_tensor = tf.identity(total_loss, name='loss_op')  # tf.identity()
-else:
-    # corrections = tf.equal(labels, tf.argmax(logits, 1))
-    # accuracy = tf.reduce_mean(tf.cast(corrections, tf.float32))
-    # tf.summary.scalar('accuracy', accuracy)
-    accuracy = tf.metrics.accuracy(labels, predictions=tf.math.argmax(tf.nn.softmax(logits, -1),-1))
-
-model.variable_summaries()
-merged = tf.summary.merge_all()
-summary_writer = tf.summary.FileWriter(os.path.join(data_dir, 'save_model'), tf.get_default_graph())
+# else:
+#     # corrections = tf.equal(labels, tf.argmax(logits, 1))
+#     # accuracy = tf.reduce_mean(tf.cast(corrections, tf.float32))
+#     # tf.summary.scalar('accuracy', accuracy)
+#     accuracy = tf.metrics.accuracy(labels, predictions=tf.math.argmax(tf.nn.softmax(logits, -1),-1))
+#
+# model.variable_summaries()
+# merged = tf.summary.merge_all()
+# summary_writer = tf.summary.FileWriter(os.path.join(data_dir, 'save_model'), tf.get_default_graph())
 with tf.Session() as sess:
     saver = tf.train.Saver()  # 保存全部参数
     sess.run(tf.local_variables_initializer())
@@ -106,36 +83,43 @@ with tf.Session() as sess:
             if params.is_training:
                 # ————————————first_stage train————————————————accuracy,
                 step = sess.run(global_step)
-                loss, acc, summary = sess.run([loss_tensor, accuracy, merged])
+                loss, acc = sess.run([loss_tensor, accuracy])
                 print('global step:', step, end='|')
                 print('loss:%.5f' % loss, end='|')
                 print('acc:%.5f' % acc)
-                if step % 1000 == 0:
-                    summary_writer.add_summary(summary, step)
+                # if step % 1000 == 0:
+                #     summary_writer.add_summary(summary, step)
                 if step % 1000 == 0:
                     saver.save(sess, save_path=os.path.join(data_dir, 'save_model/model.ckpt'), global_step=step)
             else:
                 # ——————————————first_stage predict——————————————
-                pred = sess.run([accuracy])
-                print("acc:", pred[0])
+                # pred = sess.run([accuracy])
+                # print("acc:", pred[0])
                 # —————————————attention_map——————————————
-                # im, s_map, d_map = sess.run([images, struct_map, detail_map])
-                # for i in range(im.shape[0]):
-                #     h_map = s_map[i]
-                #     h_map = np.uint8(255 * h_map)
-                #     h_map = cv2.applyColorMap(h_map, cv2.COLORMAP_JET)
-                #
-                #     img = im[i]
-                #     img = (img + 1.0) * 255.0 / 2.0
-                #     img = np.uint8(1*img)
-                #
-                #     cover_im = cv2.addWeighted(img, 0.7, h_map, 0.3, 0)
-                #     plt.figure()
-                #     plt.subplot(1,2,1)
-                #     plt.imshow(cover_im)
-                #     plt.subplot(1,2,2)
-                #     plt.imshow(img)
-                #     plt.show()
+                im, s_map, d_map = sess.run([images, struct_map, detail_map])
+                for i in range(im.shape[0]):
+                    img = im[i]
+                    img = (img + 1.0) * 255.0 / 2.0
+                    img = np.uint8(1 * img)
+
+                    h_map = s_map[i]
+                    h_map = np.uint8(255 * h_map)
+                    h_map = cv2.applyColorMap(h_map, cv2.COLORMAP_JET)
+                    cover_im_h = cv2.addWeighted(img, 0.7, h_map, 0.3, 0)
+
+                    w_map = d_map[i]
+                    w_map = np.uint8(255 * w_map)
+                    w_map = cv2.applyColorMap(w_map, cv2.COLORMAP_JET)
+                    cover_im_w = cv2.addWeighted(img, 0.7, w_map, 0.3, 0)
+
+                    plt.figure()
+                    plt.subplot(1,3,1)
+                    plt.imshow(cover_im_h)
+                    plt.subplot(1, 3, 2)
+                    plt.imshow(cover_im_w)
+                    plt.subplot(1,3,3)
+                    plt.imshow(img)
+                    plt.show()
             # —————————————sample visual———————————————
             # s_sample = attention_sample(im, s_map, params.sample_size/params.image_size)
             # ——————————————second_stage——————————————
