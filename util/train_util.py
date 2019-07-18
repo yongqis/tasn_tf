@@ -8,17 +8,17 @@ def create_adam_optimizer(learning_rate, momentum):
                                   epsilon=1e-4)
 
 
-def create_sgd_optimizer(learning_rate, momentum):
-    return tf.train.MomentumOptimizer(learning_rate=learning_rate,
-                                      momentum=momentum)
-
-
 def create_rmsprop_optimizer(learning_rate, momentum):
     return tf.train.RMSPropOptimizer(learning_rate=learning_rate,
                                      momentum=momentum,
                                      epsilon=1e-5)
 
 
-optimizer_factory = {'adam': create_adam_optimizer,
-                     'sgd': create_sgd_optimizer,
-                     'rmsprop': create_rmsprop_optimizer}
+def create_momentum_optimizer(learning_rate, momentun):
+    return tf.train.MomentumOptimizer(learning_rate=learning_rate,
+                                      momentum=momentun)
+
+
+optimizer_factory = {'Adam': create_adam_optimizer,
+                     'RMSProp': create_rmsprop_optimizer,
+                     'Momentum': create_momentum_optimizer}

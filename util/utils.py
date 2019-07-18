@@ -110,6 +110,22 @@ def get_data(data_dir, label_map_path):
     return data_tuple
 
 
+def get_train_data(data_dir, label_map_path):
+    label_map = get_label_map_dict(label_map_path)  # lable_map[name:id] id begin with 1
+    image_path_dict = {}
+    data_num = 0
+    for cur_folder, sub_folders, sub_files in os.walk(data_dir):
+        for file in sub_files:
+            if file.endswith('jpg'):
+                data_num += 1
+                label_id = label_map[os.path.split(cur_folder)[-1]]
+                image_path_dict.setdefault(label_id, [])
+                image_path_dict[label_id].append(os.path.join(cur_folder, file))
+
+    print('image_num:', data_num)
+    return image_path_dict
+
+
 def get_dict(root_path):
     # 当前root_path的 子文件夹名 作为key，子文件夹内的 子文件完全路径 作为value
     truth_dict = {}
