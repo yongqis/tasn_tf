@@ -83,13 +83,23 @@ class SelfNetModel(object):
         """对attention map进行SE module
         """
         sq = tf.reduce_sum(attention_maps, axis=[1, 2], keepdims=True)
-        down = layers.conv2d(sq, filters=depths // 16, kernel_size=[1, 1], strides=[1, 1])
-        relu = tf.nn.relu6(down)
-        up = layers.conv2d(relu, filters=depths, kernel_size=[1, 1], strides=[1, 1])
-        sigmod = tf.nn.sigmoid(up)
 
-        output = tf.multiply(attention_maps, sigmod)
-        return output
+        down_1 = layers.conv2d(sq, filters=depths // 16, kernel_size=[1, 1], strides=[1, 1],
+                               kernel_initializer=tf.random_normal_initializer(mean=3.0, stddev=5.0))
+        relu_1 = tf.nn.relu6(down_1)
+        up_1 = layers.conv2d(relu_1, filters=depths, kernel_size=[1, 1], strides=[1, 1],
+                             kernel_regularizer=tf.random_normal_initializer(mean=-3.0, stddev=6.0))
+        sigmod_1 = tf.nn.sigmoid(up_1)
+        output_1 = tf.multiply(attention_maps, sigmod_1)
+
+        down_2 = layers.conv2d(sq, filters=depths // 16, kernel_size=[1, 1], strides=[1, 1],
+                               kernel_initializer=tf.random_normal_initializer(mean=5.0, stddev=5.5))
+        relu_2 = tf.nn.relu6(down_2)
+        up_2 = layers.conv2d(relu_2, filters=depths, kernel_size=[1, 1], strides=[1, 1],
+                             kernel_initializer=tf.random_normal_initializer(mean=-5.0, stddev=6.5))
+        sigmod_2 = tf.nn.sigmoid(up_2)
+        output_2 = tf.multiply(attention_maps, sigmod_2)
+        return output_1, output_2
 
     def _create_network(self, input_batch, is_training):
         _, dilate_features_maps, map_depths, _ = \
@@ -97,8 +107,7 @@ class SelfNetModel(object):
 
         attention_maps = self._trilinear(dilate_features_maps)
 
-        part1 = self._se_model(attention_maps, map_depths)
-        part2 = self._se_model(attention_maps, map_depths)
+        part1, part2 = self._se_model(attention_maps, map_depths)
 
         flatten1 = layers.flatten(part1)
         flatten2 = layers.flatten(part2)
@@ -124,7 +133,7 @@ class SelfNetModel(object):
             loc_feature1, loc_feature2, logits1, logits2 = self._create_network(input_batch, is_training=True)
         with tf.name_scope('loss'):
             # 两个局部特征的分类损失
-            x_labels = tf.concat([labels, labels], axis=0)
+            x_labels = tf.concat([labels, labels], axis=0)  # labels加倍
             loc1_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=x_labels, logits=logits1)
             loc2_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=x_labels, logits=logits2)
             loc1_loss = tf.reduce_mean(loc1_loss)

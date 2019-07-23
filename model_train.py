@@ -23,7 +23,7 @@ def main():
     data_dir = args.data_dir
     params_path = args.params_path
 
-    test_data_dir = os.path.join(data_dir, 'query')
+    # test_data_dir = os.path.join(data_dir, 'query')
     train_data_dir = os.path.join(data_dir, 'gallery')
     label_map_path = os.path.join(data_dir, "label_map.pbtxt")
     model_dir = os.path.join(data_dir, 'save_model')
@@ -31,7 +31,7 @@ def main():
     params = Params(params_path)
     data_tuple = get_train_tuple_data(train_data_dir, label_map_path)
     images1, images2, labels = train_tuple_input(data_tuple, params.train_input)
-
+    # 模型
     images = tf.concat([images1, images2], axis=0)
     net = SelfNetModel(
         batch_size=params.batch_size,
@@ -40,11 +40,12 @@ def main():
         embedding_size=params.embedding_size
     )
     loss = net.loss(input_batch=images, labels=labels)  # image_batch 是 label  batch的两倍
-    global_step = tf.train.get_or_create_global_step()
     # 优化器
+    global_step = tf.train.get_or_create_global_step()
     lr = tf.train.exponential_decay(params.learning_rate, global_step, 1000, 0.95, staircase=True)
     optimizer = optimizer_factory[params.optimizer](learning_rate=lr, momentum=params.momentum)
     train_op = optimizer.minimize(loss, global_step=global_step)
+
     update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)  # BN操作以及滑动平均操作
     update_ops.append(train_op)
     update_op = tf.group(*update_ops)  # tf.group() 星号表达式
@@ -55,8 +56,9 @@ def main():
     merged = tf.summary.merge_all()
     summary_writer = tf.summary.FileWriter(os.path.join(data_dir, 'save_model'), tf.get_default_graph())
 
-    sess = tf.Session()
     saver = tf.train.Saver()  # 保存全部参数
+
+    sess = tf.Session()
     sess.run(tf.local_variables_initializer())
     sess.run(tf.global_variables_initializer())
     model_path = tf.train.latest_checkpoint(model_dir)
@@ -67,7 +69,7 @@ def main():
     while True:
             try:
                 # ————————————first_stage train————————————————accuracy,
-                step = sess.run(images)
+                step = sess.run(global_step)
                 loss, summary = sess.run([loss_tensor, merged])
                 print('global step:', step, end='|')
                 print('loss:%.5f' % loss, end='|')
