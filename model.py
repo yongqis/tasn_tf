@@ -82,22 +82,24 @@ class SelfNetModel(object):
     def _se_model(self, attention_maps, depths):
         """对attention map进行SE module
         """
-        sq = tf.reduce_sum(attention_maps, axis=[1, 2], keepdims=True)
+        sq = tf.reduce_sum(attention_maps, axis=[1, 2])
 
-        down_1 = layers.conv2d(sq, filters=depths // 16, kernel_size=[1, 1], strides=[1, 1],
-                               kernel_initializer=tf.random_normal_initializer(mean=3.0, stddev=5.0))
+        down_1 = layers.dense(sq, units=depths // 16,
+                              kernel_initializer=tf.random_normal_initializer(mean=3.0, stddev=5.0))
         relu_1 = tf.nn.relu6(down_1)
-        up_1 = layers.conv2d(relu_1, filters=depths, kernel_size=[1, 1], strides=[1, 1],
-                             kernel_regularizer=tf.random_normal_initializer(mean=-3.0, stddev=6.0))
+        up_1 = layers.dense(relu_1, units=depths,
+                            kernel_initializer=tf.random_normal_initializer(mean=-3.0, stddev=6.0))
         sigmod_1 = tf.nn.sigmoid(up_1)
+        sigmod_1 = tf.expand_dims(tf.expand_dims(sigmod_1, axis=1), axis=1)
         output_1 = tf.multiply(attention_maps, sigmod_1)
 
-        down_2 = layers.conv2d(sq, filters=depths // 16, kernel_size=[1, 1], strides=[1, 1],
-                               kernel_initializer=tf.random_normal_initializer(mean=5.0, stddev=5.5))
+        down_2 = layers.dense(sq, units=depths // 16,
+                              kernel_initializer=tf.random_normal_initializer(mean=5.0, stddev=5.5))
         relu_2 = tf.nn.relu6(down_2)
-        up_2 = layers.conv2d(relu_2, filters=depths, kernel_size=[1, 1], strides=[1, 1],
-                             kernel_initializer=tf.random_normal_initializer(mean=-5.0, stddev=6.5))
+        up_2 = layers.dense(relu_2, units=depths,
+                            kernel_initializer=tf.random_normal_initializer(mean=-5.0, stddev=6.5))
         sigmod_2 = tf.nn.sigmoid(up_2)
+        sigmod_2 = tf.expand_dims(tf.expand_dims(sigmod_2, axis=1), axis=1)
         output_2 = tf.multiply(attention_maps, sigmod_2)
         return output_1, output_2
 
@@ -142,37 +144,37 @@ class SelfNetModel(object):
             tf.summary.scalar('cross_entropy_loss', class_loss)
 
             # 同位置同类别 作为pos集
-            anchor_loc_feature1, positive_loc_feature1 = tf.split(loc_feature1, 2, axis=0)
-            anchor_loc_feature2, positive_loc_feature2 = tf.split(loc_feature2, 2, axis=0)
-
-            other_labels = tf.constant(-1, dtype=tf.int64, shape=[self._batch_size*2])
-            other_labels = tf.concat([labels, other_labels], axis=0)
-
-            other_features = tf.concat([positive_loc_feature1, anchor_loc_feature2, positive_loc_feature2], axis=0)
-            sasc_loss = self._npairs_loss(anchor_loc_feature1, other_features, labels, other_labels)
-
-            other_features = tf.concat([positive_loc_feature2, anchor_loc_feature1, positive_loc_feature1], axis=0)
-            sasc_loss += self._npairs_loss(anchor_loc_feature2, other_features, labels, other_labels)
-
-            tf.summary.scalar('sasc_loss', sasc_loss)
-
-            # 同位置不同类别 作为pos集
-            sadc_loss = self._sadc_loss(anchor_loc_feature1, positive_loc_feature1, positive_loc_feature2)
-            sadc_loss += self._sadc_loss(anchor_loc_feature2, positive_loc_feature2, positive_loc_feature1)
-            tf.summary.scalar('sadc_loss', sadc_loss)
-
-            # 同类别不同位置 作为pos集
-            dasc_loss = self._npairs_loss(anchor_loc_feature1, positive_loc_feature2, labels)
-            dasc_loss += self._npairs_loss(anchor_loc_feature2, positive_loc_feature1, labels)
-            tf.summary.scalar('dasc_loss', dasc_loss)
-
+            # anchor_loc_feature1, positive_loc_feature1 = tf.split(loc_feature1, 2, axis=0)
+            # anchor_loc_feature2, positive_loc_feature2 = tf.split(loc_feature2, 2, axis=0)
             #
-            mamc_loss = tf.add_n([sasc_loss, sadc_loss, dasc_loss])
-            tf.summary.scalar('metric_loss', mamc_loss)
-
-            total_loss = (metrics_weight*mamc_loss + class_loss)/2
-            tf.summary.scalar('total_loss', total_loss)
-        return total_loss
+            # other_labels = tf.constant(-1, dtype=tf.int64, shape=[self._batch_size*2])
+            # other_labels = tf.concat([labels, other_labels], axis=0)
+            #
+            # other_features = tf.concat([positive_loc_feature1, anchor_loc_feature2, positive_loc_feature2], axis=0)
+            # sasc_loss = self._npairs_loss(anchor_loc_feature1, other_features, labels, other_labels)
+            #
+            # other_features = tf.concat([positive_loc_feature2, anchor_loc_feature1, positive_loc_feature1], axis=0)
+            # sasc_loss += self._npairs_loss(anchor_loc_feature2, other_features, labels, other_labels)
+            #
+            # tf.summary.scalar('sasc_loss', sasc_loss)
+            #
+            # # 同位置不同类别 作为pos集
+            # sadc_loss = self._sadc_loss(anchor_loc_feature1, positive_loc_feature1, positive_loc_feature2)
+            # sadc_loss += self._sadc_loss(anchor_loc_feature2, positive_loc_feature2, positive_loc_feature1)
+            # tf.summary.scalar('sadc_loss', sadc_loss)
+            #
+            # # 同类别不同位置 作为pos集
+            # dasc_loss = self._npairs_loss(anchor_loc_feature1, positive_loc_feature2, labels)
+            # dasc_loss += self._npairs_loss(anchor_loc_feature2, positive_loc_feature1, labels)
+            # tf.summary.scalar('dasc_loss', dasc_loss)
+            #
+            # #
+            # mamc_loss = tf.add_n([sasc_loss, sadc_loss, dasc_loss])
+            # tf.summary.scalar('metric_loss', mamc_loss)
+            #
+            # total_loss = (metrics_weight*mamc_loss + class_loss)/2
+            # tf.summary.scalar('total_loss', total_loss)
+        return class_loss
 
     def _npairs_loss(self,
                      embeddings_anchor, embeddings_positive,

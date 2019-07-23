@@ -72,7 +72,7 @@ def main():
                 step = sess.run(global_step)
                 loss, summary = sess.run([loss_tensor, merged])
                 print('global step:', step, end='|')
-                print('loss:%.5f' % loss, end='|')
+                print('loss:%.5f' % loss)
                 if step % params.save_summary_steps == 0:
                     summary_writer.add_summary(summary, step)
                 if step % params.save_model_steps == 0:

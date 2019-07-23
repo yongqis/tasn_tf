@@ -73,7 +73,6 @@ def train_tuple_input(data_dict, params=None):
         #
         im_path = tf.expand_dims(im_path, axis=0)
         im_path_list = tf.string_split(im_path)
-        print(im_path_list.indices)
         arr = tf.range(1, num)
         # a = tf.random_shuffle(arr)[0]
         filepath1 = im_path_list.values[tf.random_shuffle(arr)[0]]
