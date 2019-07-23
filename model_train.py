@@ -16,7 +16,7 @@ layers = tf.layers
 
 def main():
     parser = argparse.ArgumentParser(description='Short sample app')
-    parser.add_argument('--data_dir', help='data directory and save model', default=False)
+    parser.add_argument('--data_dir', help='data directory and save model')
     parser.add_argument('--params_path', help='config file path', default='./params_base.json')
     args = parser.parse_args()
 
@@ -62,9 +62,9 @@ def main():
     sess.run(tf.local_variables_initializer())
     sess.run(tf.global_variables_initializer())
     model_path = tf.train.latest_checkpoint(model_dir)
-    if model_path:
-        print('load ckpt from: %s.' % model_path)
-        saver.restore(sess, save_path=model_path)
+    # if model_path:
+    #     print('load ckpt from: %s.' % model_path)
+    #     saver.restore(sess, save_path=model_path)
 
     while True:
             try:

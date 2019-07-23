@@ -111,8 +111,8 @@ class SelfNetModel(object):
 
         part1, part2 = self._se_model(attention_maps, map_depths)
 
-        flatten1 = layers.flatten(part1)
-        flatten2 = layers.flatten(part2)
+        flatten1 = tf.reduce_mean(part1, axis=[1, 2])
+        flatten2 = tf.reduce_mean(part2, axis=[1, 2])
         feature1 = layers.dense(flatten1, units=self._embedding_size)
         feature2 = layers.dense(flatten2, units=self._embedding_size)
 
@@ -123,8 +123,10 @@ class SelfNetModel(object):
 
         return feature1, feature2, logits1, logits2
 
-    def predict(self):
-        pass
+    def predict(self, input_batch):
+        with tf.name_scope('model'):
+            loc_feature1, loc_feature2, logits1, logits2 = self._create_network(input_batch, is_training=True)
+            return loc_feature1, loc_feature2
 
     def loss(self, input_batch, labels, metrics_weight=0.5):
         """
