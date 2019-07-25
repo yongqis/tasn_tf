@@ -146,8 +146,10 @@ class SelfNetModel(object):
             # loc2_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=x_labels, logits=logits2)
             # loc1_loss = tf.reduce_mean(loc1_loss)
             # loc2_loss = tf.reduce_mean(loc2_loss)
-            # class_loss = loc1_loss+loc2_loss
-            class_loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(labels=self._labels, logits=_logits))
+            res_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=self._labels, logits=_logits)
+            res_loss = tf.reduce_mean(res_loss)
+            tf.add_to_collection(tf.GraphKeys.LOSSES, res_loss)
+            class_loss = tf.add_n(tf.get_collection(tf.GraphKeys.LOSSES))
             tf.summary.scalar('cross_entropy_loss', class_loss)
             if self._tuple_mode:
                 # 同位置同类别 作为pos集

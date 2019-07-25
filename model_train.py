@@ -30,7 +30,7 @@ def main():
 
     params = Params(params_path)
     if params.train['mode'] == 'tuple':
-        # 成对输入，label没有成对
+        # 成对输入，label没有成对,需要concat
         data_tuple = get_train_tuple_data(train_data_dir, label_map_path)
         images1, images2, labels = train_tuple_input(data_tuple, params.train_input)
         images = tf.concat([images1, images2], axis=0)
