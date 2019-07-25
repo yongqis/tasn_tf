@@ -88,20 +88,16 @@ class SelfNetModel(object):
         """
         sq = tf.reduce_sum(attention_maps, axis=[1, 2])
 
-        down_1 = layers.dense(sq, units=depths // 16,
-                              kernel_initializer=tf.random_normal_initializer(mean=3.0, stddev=5.0))
-        relu_1 = tf.nn.relu6(down_1)
-        up_1 = layers.dense(relu_1, units=depths,
-                            kernel_initializer=tf.random_normal_initializer(mean=-3.0, stddev=6.0))
+        down_1 = layers.dense(sq, units=depths // 16)
+        relu_1 = tf.nn.relu(down_1)
+        up_1 = layers.dense(relu_1, units=depths)
         sigmod_1 = tf.nn.sigmoid(up_1)
         sigmod_1 = tf.expand_dims(tf.expand_dims(sigmod_1, axis=1), axis=1)
         output_1 = tf.multiply(attention_maps, sigmod_1)
 
-        down_2 = layers.dense(sq, units=depths // 16,
-                              kernel_initializer=tf.random_normal_initializer(mean=5.0, stddev=5.5))
-        relu_2 = tf.nn.relu6(down_2)
-        up_2 = layers.dense(relu_2, units=depths,
-                            kernel_initializer=tf.random_normal_initializer(mean=-5.0, stddev=6.5))
+        down_2 = layers.dense(sq, units=depths // 16)
+        relu_2 = tf.nn.relu(down_2)
+        up_2 = layers.dense(relu_2, units=depths)
         sigmod_2 = tf.nn.sigmoid(up_2)
         sigmod_2 = tf.expand_dims(tf.expand_dims(sigmod_2, axis=1), axis=1)
         output_2 = tf.multiply(attention_maps, sigmod_2)
@@ -116,13 +112,13 @@ class SelfNetModel(object):
         part1, part2 = self._se_model(attention_maps, map_depths)
 
         flatten1 = tf.reduce_mean(part1, axis=[1, 2])
-        flatten2 = tf.reduce_mean(part2, axis=[1, 2])
         feature1 = layers.dense(flatten1, units=self._embedding_size)
-        feature2 = layers.dense(flatten2, units=self._embedding_size)
-
         feature1_relu = tf.nn.relu(feature1)
-        feature2_relu = tf.nn.relu(feature2)
         logits1 = layers.dense(feature1_relu, units=self._classes_num)
+
+        flatten2 = tf.reduce_mean(part2, axis=[1, 2])
+        feature2 = layers.dense(flatten2, units=self._embedding_size)
+        feature2_relu = tf.nn.relu(feature2)
         logits2 = layers.dense(feature2_relu, units=self._classes_num)
 
         return feature1, feature2, logits1, logits2, _logits
@@ -146,7 +142,7 @@ class SelfNetModel(object):
             # loc2_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=x_labels, logits=logits2)
             # loc1_loss = tf.reduce_mean(loc1_loss)
             # loc2_loss = tf.reduce_mean(loc2_loss)
-            res_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=self._labels, logits=_logits)
+            res_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=self._labels, logits=logits1)
             res_loss = tf.reduce_mean(res_loss)
             tf.add_to_collection(tf.GraphKeys.LOSSES, res_loss)
             class_loss = tf.add_n(tf.get_collection(tf.GraphKeys.LOSSES))
