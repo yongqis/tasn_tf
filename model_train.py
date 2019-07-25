@@ -6,7 +6,7 @@ import argparse
 import numpy as np
 from model import SelfNetModel
 import tensorflow as tf
-from util.input import train_tuple_input, get_train_tuple_data
+from util.input import train_tuple_input, get_train_tuple_data, train_input
 from util.utils import Params, get_data
 from util.train_util import optimizer_factory
 import matplotlib.pyplot as plt
@@ -29,20 +29,31 @@ def main():
     model_dir = os.path.join(data_dir, 'save_model')
 
     params = Params(params_path)
-    data_tuple = get_train_tuple_data(train_data_dir, label_map_path)
-    images1, images2, labels = train_tuple_input(data_tuple, params.train_input)
+    if params.train['mode'] == 'tuple':
+        # 成对输入，label没有成对
+        data_tuple = get_train_tuple_data(train_data_dir, label_map_path)
+        images1, images2, labels = train_tuple_input(data_tuple, params.train_input)
+        images = tf.concat([images1, images2], axis=0)
+    else:
+        # 随机输入
+        data_tuple = get_data(train_data_dir, label_map_path)
+        images, labels = train_input(data_tuple, params.train_input)
+
     # 模型
-    images = tf.concat([images1, images2], axis=0)
     net = SelfNetModel(
         batch_size=params.batch_size,
         res_layer_num=params.res_layer_num,
         classes_num=params.classes_num,
-        embedding_size=params.embedding_size
+        embedding_size=params.embedding_size,
+        labels=labels,
+        mode=params.train['mode']
     )
-    loss = net.loss(input_batch=images, labels=labels)  # image_batch 是 label  batch的两倍
+    loss = net.loss(input_batch=images)  # image_batch 是 label  batch的两倍
+
     # 优化器
     global_step = tf.train.get_or_create_global_step()
-    lr = tf.train.exponential_decay(params.learning_rate, global_step, 1000, 0.95, staircase=True)
+    lr = tf.train.exponential_decay(params.learning_rate, global_step,
+                                    params.train['decay_step'], params.train['decay_rate'], staircase=True)
     optimizer = optimizer_factory[params.optimizer](learning_rate=lr, momentum=params.momentum)
     train_op = optimizer.minimize(loss, global_step=global_step)
 
@@ -62,9 +73,9 @@ def main():
     sess.run(tf.local_variables_initializer())
     sess.run(tf.global_variables_initializer())
     model_path = tf.train.latest_checkpoint(model_dir)
-    # if model_path:
-    #     print('load ckpt from: %s.' % model_path)
-    #     saver.restore(sess, save_path=model_path)
+    if model_path:
+        print('load ckpt from: %s.' % model_path)
+        saver.restore(sess, save_path=model_path)
 
     while True:
             try:
@@ -77,10 +88,21 @@ def main():
                     summary_writer.add_summary(summary, step)
                 if step % params.save_model_steps == 0:
                     saver.save(sess, save_path=os.path.join(data_dir, 'save_model/model.ckpt'), global_step=step)
-                # else:
-                #     # ——————————————first_stage predict——————————————
-                #     # pred = sess.run([accuracy])
-                #     # print("acc:", pred[0])
+
+                # ——————————————first_stage predict——————————————
+                # h, w, c = sess.run([images1, images2, labels])
+                # for i in range(params.batch_size):
+                #     im1 = h[i]
+                #     im2 = w[i]
+                #     l = c[i]
+                #     # print(im1)
+                #     plt.figure()
+                #     plt.title(l)
+                #     plt.subplot(1,2,1)
+                #     plt.imshow(im1)
+                #     plt.subplot(1, 2, 2)
+                #     plt.imshow(im2)
+                #     plt.show()
                 #     # —————————————attention_map——————————————
                 #     for i in range(im.shape[0]):
                 #         img = im[i]

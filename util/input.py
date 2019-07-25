@@ -81,7 +81,7 @@ def train_tuple_input(data_dict, params=None):
         image_string1 = tf.read_file(filepath1)
         image_decoded1 = tf.image.decode_jpeg(image_string1, channels=3)
         image_resized1 = tf.image.resize_images(image_decoded1, [params['image_size'], params['image_size']])
-        image_resized1 = (2.0 / 255.0) * image_resized1 - 1.0  # 0均值且
+        image_resized1 = (2.0 / 255.0) * image_resized1 - 1.0  # 0均值且[-1, 1]
 
         image_string2 = tf.read_file(filepath2)
         image_decoded2 = tf.image.decode_jpeg(image_string2, channels=3)
