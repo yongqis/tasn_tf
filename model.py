@@ -87,27 +87,27 @@ class SelfNetModel(object):
         """对attention map进行SE module
         """
         sq = tf.reduce_sum(attention_maps, axis=[1, 2])
-
-        down_1 = layers.dense(sq, units=depths // 16)
-        relu_1 = tf.nn.relu(down_1)
-        up_1 = layers.dense(relu_1, units=depths)
-        sigmod_1 = tf.nn.sigmoid(up_1)
-        sigmod_1 = tf.expand_dims(tf.expand_dims(sigmod_1, axis=1), axis=1)
-        output_1 = tf.multiply(attention_maps, sigmod_1)
-
-        down_2 = layers.dense(sq, units=depths // 16)
-        relu_2 = tf.nn.relu(down_2)
-        up_2 = layers.dense(relu_2, units=depths)
-        sigmod_2 = tf.nn.sigmoid(up_2)
-        sigmod_2 = tf.expand_dims(tf.expand_dims(sigmod_2, axis=1), axis=1)
-        output_2 = tf.multiply(attention_maps, sigmod_2)
+        with tf.name_scope('SE_1'):
+            down_1 = layers.dense(sq, units=depths//16)
+            relu_1 = tf.nn.relu(down_1)
+            up_1 = layers.dense(relu_1, units=depths)
+            sigmod_1 = tf.nn.sigmoid(up_1)
+            sigmod_1 = tf.expand_dims(tf.expand_dims(sigmod_1, axis=1), axis=1)
+            output_1 = tf.multiply(attention_maps, sigmod_1)
+        with tf.name_scope('SE_2'):
+            down_2 = layers.dense(sq, units=depths//16)
+            relu_2 = tf.nn.relu(down_2)
+            up_2 = layers.dense(relu_2, units=depths)
+            sigmod_2 = tf.nn.sigmoid(up_2)
+            sigmod_2 = tf.expand_dims(tf.expand_dims(sigmod_2, axis=1), axis=1)
+            output_2 = tf.multiply(attention_maps, sigmod_2)
         return output_1, output_2
 
     def _create_network(self, input_batch, is_training):
         _, dilate_features_maps, map_depths, _logits = \
             self._res_dilation(input_batch, self._layer_num, self._classes_num, is_training)
-
-        attention_maps = self._trilinear(dilate_features_maps)
+        attention_maps = dilate_features_maps
+        # attention_maps = self._trilinear(dilate_features_maps)
 
         part1, part2 = self._se_model(attention_maps, map_depths)
 
@@ -137,48 +137,49 @@ class SelfNetModel(object):
             loc_feature1, loc_feature2, logits1, logits2, _logits = self._create_network(input_batch, is_training=True)
         with tf.name_scope('loss'):
             # 两个局部特征的分类损失
-            # x_labels = tf.concat([labels, labels], axis=0)  # labels加倍
-            # loc1_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=x_labels, logits=logits1)
-            # loc2_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=x_labels, logits=logits2)
-            # loc1_loss = tf.reduce_mean(loc1_loss)
-            # loc2_loss = tf.reduce_mean(loc2_loss)
-            res_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=self._labels, logits=logits1)
-            res_loss = tf.reduce_mean(res_loss)
-            tf.add_to_collection(tf.GraphKeys.LOSSES, res_loss)
+            x_labels = tf.concat([self._labels, self._labels], axis=0)  # labels加倍
+            loc1_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=x_labels, logits=logits1)
+            loc1_loss = tf.reduce_mean(loc1_loss)
+            tf.add_to_collection(tf.GraphKeys.LOSSES, loc1_loss)
+
+            loc2_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=x_labels, logits=logits2)
+            loc2_loss = tf.reduce_mean(loc2_loss)
+            tf.add_to_collection(tf.GraphKeys.LOSSES, loc2_loss)
+
             class_loss = tf.add_n(tf.get_collection(tf.GraphKeys.LOSSES))
             tf.summary.scalar('cross_entropy_loss', class_loss)
-            if self._tuple_mode:
-                # 同位置同类别 作为pos集
-                anchor_loc_feature1, positive_loc_feature1 = tf.split(loc_feature1, 2, axis=0)
-                anchor_loc_feature2, positive_loc_feature2 = tf.split(loc_feature2, 2, axis=0)
-
-                other_labels = tf.constant(-1, dtype=tf.int64, shape=[self._batch_size*2])
-                other_labels = tf.concat([self._labels, other_labels], axis=0)
-
-                other_features = tf.concat([positive_loc_feature1, anchor_loc_feature2, positive_loc_feature2], axis=0)
-                sasc_loss = self._npairs_loss(anchor_loc_feature1, other_features, self._labels, other_labels)
-
-                other_features = tf.concat([positive_loc_feature2, anchor_loc_feature1, positive_loc_feature1], axis=0)
-                sasc_loss += self._npairs_loss(anchor_loc_feature2, other_features, self._labels, other_labels)
-
-                tf.summary.scalar('sasc_loss', sasc_loss)
-
-                # 同位置不同类别 作为pos集
-                sadc_loss = self._sadc_loss(anchor_loc_feature1, positive_loc_feature1, positive_loc_feature2)
-                sadc_loss += self._sadc_loss(anchor_loc_feature2, positive_loc_feature2, positive_loc_feature1)
-                tf.summary.scalar('sadc_loss', sadc_loss)
-
-                # 同类别不同位置 作为pos集
-                dasc_loss = self._npairs_loss(anchor_loc_feature1, positive_loc_feature2, self._labels)
-                dasc_loss += self._npairs_loss(anchor_loc_feature2, positive_loc_feature1, self._labels)
-                tf.summary.scalar('dasc_loss', dasc_loss)
-
-                #
-                mamc_loss = tf.add_n([sasc_loss, sadc_loss, dasc_loss])
-                tf.summary.scalar('metric_loss', mamc_loss)
-
-                total_loss = (metrics_weight*mamc_loss + class_loss)/2
-                tf.summary.scalar('total_loss', total_loss)
+            # if self._tuple_mode:
+            #     # 同位置同类别 作为pos集
+            #     anchor_loc_feature1, positive_loc_feature1 = tf.split(loc_feature1, 2, axis=0)
+            #     anchor_loc_feature2, positive_loc_feature2 = tf.split(loc_feature2, 2, axis=0)
+            #
+            #     other_labels = tf.constant(-1, dtype=tf.int64, shape=[self._batch_size*2])
+            #     other_labels = tf.concat([self._labels, other_labels], axis=0)
+            #
+            #     other_features = tf.concat([positive_loc_feature1, anchor_loc_feature2, positive_loc_feature2], axis=0)
+            #     sasc_loss = self._npairs_loss(anchor_loc_feature1, other_features, self._labels, other_labels)
+            #
+            #     other_features = tf.concat([positive_loc_feature2, anchor_loc_feature1, positive_loc_feature1], axis=0)
+            #     sasc_loss += self._npairs_loss(anchor_loc_feature2, other_features, self._labels, other_labels)
+            #
+            #     tf.summary.scalar('sasc_loss', sasc_loss)
+            #
+            #     # 同位置不同类别 作为pos集
+            #     sadc_loss = self._sadc_loss(anchor_loc_feature1, positive_loc_feature1, positive_loc_feature2)
+            #     sadc_loss += self._sadc_loss(anchor_loc_feature2, positive_loc_feature2, positive_loc_feature1)
+            #     tf.summary.scalar('sadc_loss', sadc_loss)
+            #
+            #     # 同类别不同位置 作为pos集
+            #     dasc_loss = self._npairs_loss(anchor_loc_feature1, positive_loc_feature2, self._labels)
+            #     dasc_loss += self._npairs_loss(anchor_loc_feature2, positive_loc_feature1, self._labels)
+            #     tf.summary.scalar('dasc_loss', dasc_loss)
+            #
+            #     #
+            #     mamc_loss = tf.add_n([sasc_loss, sadc_loss, dasc_loss])
+            #     tf.summary.scalar('metric_loss', mamc_loss)
+            #
+            #     total_loss = (metrics_weight*mamc_loss + class_loss)/2
+            #     tf.summary.scalar('total_loss', total_loss)
         return class_loss
 
     def _npairs_loss(self,
