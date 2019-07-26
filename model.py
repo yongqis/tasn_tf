@@ -153,7 +153,9 @@ class SelfNetModel(object):
         :return:
         """
         with tf.name_scope('model'):
-            loc_feature1, loc_feature2, logits1, logits2, _logits = self._create_network(input_batch, is_training=True)
+            predict_diction = self._create_network(input_batch, is_training=True)
+            logits1 = predict_diction['loc_logits1']
+            logits2 = predict_diction['loc_logits2']
         with tf.name_scope('loss'):
             # 两个局部特征的分类损失
             x_labels = tf.concat([self._labels, self._labels], axis=0)  # labels加倍

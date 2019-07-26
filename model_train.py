@@ -41,10 +41,10 @@ def main():
 
     # 模型
     net = SelfNetModel(
-        batch_size=params.batch_size,
-        res_layer_num=params.res_layer_num,
-        classes_num=params.classes_num,
-        embedding_size=params.embedding_size,
+        batch_size=params.train_input['batch_size'],
+        res_layer_num=params.model['res_layer_num'],
+        classes_num=params.model['num_classes'],
+        embedding_size=params.model['embedding_size'],
         labels=labels,
         mode=params.train['mode']
     )
@@ -52,9 +52,9 @@ def main():
 
     # 优化器
     global_step = tf.train.get_or_create_global_step()
-    lr = tf.train.exponential_decay(params.learning_rate, global_step,
+    lr = tf.train.exponential_decay(params.train['learning_rate'], global_step,
                                     params.train['decay_step'], params.train['decay_rate'], staircase=True)
-    optimizer = optimizer_factory[params.optimizer](learning_rate=lr, momentum=params.momentum)
+    optimizer = optimizer_factory[params.train['optimizer']](learning_rate=lr, momentum=params.train['momentum'])
     train_op = optimizer.minimize(loss, global_step=global_step)
 
     update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)  # BN操作以及滑动平均操作
@@ -63,7 +63,7 @@ def main():
     with tf.control_dependencies([update_op]):
         loss_tensor = tf.identity(loss, name='loss_op')  # tf.identity()
 
-    net.variable_summaries(exclude_name=params.optimizer)
+    net.variable_summaries(exclude_name=params.train['optimizer'])
     merged = tf.summary.merge_all()
     summary_writer = tf.summary.FileWriter(os.path.join(data_dir, 'save_model'), tf.get_default_graph())
 
@@ -84,9 +84,9 @@ def main():
                 loss, summary = sess.run([loss_tensor, merged])
                 print('global step:', step, end='|')
                 print('loss:%.5f' % loss)
-                if step % params.save_summary_steps == 0:
+                if step % params.train['save_summary_steps'] == 0:
                     summary_writer.add_summary(summary, step)
-                if step % params.save_model_steps == 0:
+                if step % params.train['save_model_steps'] == 0:
                     saver.save(sess, save_path=os.path.join(data_dir, 'save_model/model.ckpt'), global_step=step)
             except tf.errors.OutOfRangeError:
                 break

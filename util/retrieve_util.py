@@ -63,7 +63,7 @@ def build_gallery(sess, input_shape, input_node, output_node, base_image_dir, ga
     feature_list = []
     for i, image_path in enumerate(image_paths):
         print('{}/{}'.format(i+1, nums))
-        batch_img = preprocess(image_path, input_shape)
+        batch_img = preprocess(image_path, input_shape)  # open - resize - normalize - expand batch
         batch_embedding = sess.run(output_node, feed_dict={input_node: batch_img})
         embedding = np.squeeze(batch_embedding)  # 去掉batch维
         feature_list.append(embedding)  # 加入list
@@ -119,7 +119,7 @@ def image_query(sess, input_shape, input_node, output_node, base_image_dir, gall
         sorted_indices = np.argsort(-cos_sim)
         # 开始检查检索结果
         query_label = os.path.split(os.path.dirname(query_image_path))[-1]  # 查询图片的真实类别
-        truth_image_paths = lablel_map[query_label]  # 与查询图片同类别的所有图片路径，即检索正确时，结果应该在此范围内
+        truth_image_paths = lablel_map[query_label]  # 检索正确时，结果应该在此范围内
 
         saved_error_label_dir = None  # 将检索错误的图片保存在该类别文件夹内
         if saved_error_dir:
