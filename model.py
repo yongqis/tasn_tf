@@ -11,14 +11,15 @@ class SelfNetModel(object):
                  res_layer_num,
                  classes_num,
                  embedding_size,
-                 labels,
-                 mode):
+                 labels=None,
+                 mode='tuple'):
         self._batch_size = batch_size
         self._layer_num = res_layer_num
         self._classes_num = classes_num
         self._embedding_size = embedding_size
         self._labels = labels
         self._tuple_mode = mode == 'tuple'
+        self._node_dict = {}
 
     def _res_dilation(self, inputs, layer_num, num_classes, training):
         """
@@ -54,8 +55,14 @@ class SelfNetModel(object):
             net = tf.nn.relu(net)
             net = tf.reduce_mean(net, [1, 2], name='global_avg', keepdims=False)
             logits = layers.dense(net, num_classes, name='logits_layer')
-
-        return res_output, post2, finall_depth, logits
+        base_net_diction = {
+            "res_feature_map": res_output,
+            "res_dilation_feature_map": post2,
+            "res_dilation_logits": logits,
+            "basenet_depths": finall_depth
+        }
+        self._node_dict.update(base_net_diction)
+        return base_net_diction
 
     def _trilinear(self, feature_maps):
         """
@@ -83,7 +90,7 @@ class SelfNetModel(object):
         # tf.stop_gradient(attention_maps)
         return attention_maps
 
-    def _se_model(self, attention_maps, depths):
+    def _attetion_module(self, attention_maps, depths):
         """对attention map进行SE module
         """
         sq = tf.reduce_sum(attention_maps, axis=[1, 2])
@@ -101,32 +108,44 @@ class SelfNetModel(object):
             sigmod_2 = tf.nn.sigmoid(up_2)
             sigmod_2 = tf.expand_dims(tf.expand_dims(sigmod_2, axis=1), axis=1)
             output_2 = tf.multiply(attention_maps, sigmod_2)
-        return output_1, output_2
+        attention_module_dict = {
+            'attention_map1': output_1,
+            'attention_map2': output_2
+        }
+        self._node_dict.update(attention_module_dict)
+        return attention_module_dict
 
     def _create_network(self, input_batch, is_training):
-        _, dilate_features_maps, map_depths, _logits = \
-            self._res_dilation(input_batch, self._layer_num, self._classes_num, is_training)
-        attention_maps = dilate_features_maps
+        base_net_diction = self._res_dilation(input_batch, self._layer_num, self._classes_num, is_training)
+        attention_maps = base_net_diction['res_dilation_feature_map']
+        map_depths = base_net_diction['basenet_depths']
         # attention_maps = self._trilinear(dilate_features_maps)
+        att_map_diction = self._attetion_module(attention_maps, map_depths)
+        att_map1 = att_map_diction['attention_map1']
+        att_map2 = att_map_diction['attention_map2']
 
-        part1, part2 = self._se_model(attention_maps, map_depths)
-
-        flatten1 = tf.reduce_mean(part1, axis=[1, 2])
+        flatten1 = tf.reduce_mean(att_map1, axis=[1, 2])
         feature1 = layers.dense(flatten1, units=self._embedding_size)
         feature1_relu = tf.nn.relu(feature1)
         logits1 = layers.dense(feature1_relu, units=self._classes_num)
 
-        flatten2 = tf.reduce_mean(part2, axis=[1, 2])
+        flatten2 = tf.reduce_mean(att_map2, axis=[1, 2])
         feature2 = layers.dense(flatten2, units=self._embedding_size)
         feature2_relu = tf.nn.relu(feature2)
         logits2 = layers.dense(feature2_relu, units=self._classes_num)
-
-        return feature1, feature2, logits1, logits2, _logits
+        predict_diction = {
+                'loc_feature1': feature1,
+                'loc_feature2': feature2,
+                'loc_logits1': logits1,
+                'loc_logits2': logits2
+            }
+        self._node_dict.update(predict_diction)
+        return predict_diction
 
     def predict(self, input_batch):
         with tf.name_scope('model'):
-            loc_feature1, loc_feature2, logits1, logits2, _logits = self._create_network(input_batch, is_training=True)
-            return loc_feature1, loc_feature2
+            self._create_network(input_batch, is_training=True)
+            return self._node_dict
 
     def loss(self, input_batch, metrics_weight=0.5):
         """

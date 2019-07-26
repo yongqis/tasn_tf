@@ -1,24 +1,5 @@
 {
-    "is_training":true,
-    "image_size":128,
-    "buffer_size": 1000,
-    "batch_size": 10,
-    "num_epochs": 500,
-    "res_layer_num":18,
-    "embedding_size": 512,
-    "classes_num": 456,
 
-    "optimizer": "Adam",
-    "learning_rate": 1e-5,
-    "decay_rate": 0.95,
-    "decay_step": 1000,
-    "momentum":0.9,
-
-    "summary_include": null,
-    "summary_exclude": null,
-    "log_step": 100,
-    "save_summary_steps": 500,
-    "save_model_steps":1000,
 
     "train_input": {
         "image_size":128,
@@ -29,11 +10,11 @@
     "eval_input": {
         "image_size":128,
         "buffer_size": 1000,
-        "batch_size": 32,
+        "batch_size": 1,
         "num_epochs": 1
     },
     "train": {
-        "mode":"tuple",
+        "mode":"random",
         "optimizer": "Adam",
         "learning_rate": 1e-3,
         "decay_rate": 0.95,
@@ -58,13 +39,13 @@
     },
     "model":{
         "image_size": 128,
-        "first_layer_num":18,
+        "res_layer_num":18,
         "sample_size": 96,
         "second_layer_num":18,
         "dropout_keep_prob": 1.0,
         "use_batch_norm": true,
         "num_classes": 456,
-        "embedding_size": 256
+        "embedding_size": 512
     }
 
 

@@ -88,48 +88,6 @@ def main():
                     summary_writer.add_summary(summary, step)
                 if step % params.save_model_steps == 0:
                     saver.save(sess, save_path=os.path.join(data_dir, 'save_model/model.ckpt'), global_step=step)
-
-                # ——————————————first_stage predict——————————————
-                # h, w, c = sess.run([images1, images2, labels])
-                # for i in range(params.batch_size):
-                #     im1 = h[i]
-                #     im2 = w[i]
-                #     l = c[i]
-                #     # print(im1)
-                #     plt.figure()
-                #     plt.title(l)
-                #     plt.subplot(1,2,1)
-                #     plt.imshow(im1)
-                #     plt.subplot(1, 2, 2)
-                #     plt.imshow(im2)
-                #     plt.show()
-                #     # —————————————attention_map——————————————
-                #     for i in range(im.shape[0]):
-                #         img = im[i]
-                #         img = (img + 1.0) * 255.0 / 2.0
-                #         img = np.uint8(1 * img)
-                #
-                #         h_map = s_map[i]
-                #         h_map = np.uint8(255 * h_map)
-                #         h_map = cv2.applyColorMap(h_map, cv2.COLORMAP_JET)
-                #         cover_im_h = cv2.addWeighted(img, 0.7, h_map, 0.3, 0)
-                #
-                #         w_map = d_map[i]
-                #         w_map = np.uint8(255 * w_map)
-                #         w_map = cv2.applyColorMap(w_map, cv2.COLORMAP_JET)
-                #         cover_im_w = cv2.addWeighted(img, 0.7, w_map, 0.3, 0)
-                #
-                #         plt.figure()
-                #         plt.subplot(1,3,1)
-                #         plt.imshow(cover_im_h)
-                #         plt.subplot(1, 3, 2)
-                #         plt.imshow(cover_im_w)
-                #         plt.subplot(1,3,3)
-                #         plt.imshow(img)
-                #         plt.show()
-                # # —————————————sample visual———————————————
-                # # s_sample = attention_sample(im, s_map, params.sample_size/params.image_size)
-
             except tf.errors.OutOfRangeError:
                 break
 
