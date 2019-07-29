@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # -*- coding:utf-8 -*-
 from util.resnet_v2 import resnet_v2
+import logging
 import tensorflow as tf
 layers = tf.layers
 
@@ -18,6 +19,7 @@ class SelfNetModel(object):
         self._classes_num = classes_num
         self._embedding_size = embedding_size
         self._labels = labels
+        self._dual_labels = tf.concat([labels, labels], axis=0)  # labels加倍
         self._tuple_mode = mode == 'tuple'
         self._node_dict = {}
 
@@ -126,18 +128,18 @@ class SelfNetModel(object):
 
         flatten1 = tf.reduce_mean(att_map1, axis=[1, 2])
         feature1 = layers.dense(flatten1, units=self._embedding_size)
-        feature1_relu = tf.nn.relu(feature1)
-        logits1 = layers.dense(feature1_relu, units=self._classes_num)
-
         flatten2 = tf.reduce_mean(att_map2, axis=[1, 2])
         feature2 = layers.dense(flatten2, units=self._embedding_size)
-        feature2_relu = tf.nn.relu(feature2)
-        logits2 = layers.dense(feature2_relu, units=self._classes_num)
+
+        feature = tf.concat([feature1, feature2], axis=-1)
+        feature_relu = tf.nn.relu(feature)
+        logits = layers.dense(feature_relu, units=self._classes_num)
+
         predict_diction = {
                 'loc_feature1': feature1,
                 'loc_feature2': feature2,
-                'loc_logits1': logits1,
-                'loc_logits2': logits2
+                'logits': logits,
+
             }
         self._node_dict.update(predict_diction)
         return predict_diction
@@ -154,19 +156,12 @@ class SelfNetModel(object):
         """
         with tf.name_scope('model'):
             predict_diction = self._create_network(input_batch, is_training=True)
-            logits1 = predict_diction['loc_logits1']
-            logits2 = predict_diction['loc_logits2']
         with tf.name_scope('loss'):
             # 两个局部特征的分类损失
-            x_labels = tf.concat([self._labels, self._labels], axis=0)  # labels加倍
-            loc1_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=x_labels, logits=logits1)
-            loc1_loss = tf.reduce_mean(loc1_loss)
-            tf.add_to_collection(tf.GraphKeys.LOSSES, loc1_loss)
-
-            loc2_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=x_labels, logits=logits2)
-            loc2_loss = tf.reduce_mean(loc2_loss)
-            tf.add_to_collection(tf.GraphKeys.LOSSES, loc2_loss)
-
+            logits = predict_diction['logits']
+            combine_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=self._labels, logits=logits)
+            combine_loss = tf.reduce_mean(combine_loss)
+            tf.add_to_collection(tf.GraphKeys.LOSSES, combine_loss)
             class_loss = tf.add_n(tf.get_collection(tf.GraphKeys.LOSSES))
             tf.summary.scalar('cross_entropy_loss', class_loss)
             # if self._tuple_mode:
@@ -307,3 +302,63 @@ class SelfNetModel(object):
                         tf.summary.scalar('mean/' + var.op.name, mean)
                         stddev = tf.sqrt(tf.reduce_mean(tf.square(var - mean)))
                         tf.summary.scalar('stddev/' + var.op.name, stddev)
+
+    def resotre_map(self, checkpoint_path, include_global_step=True):
+            """Returns the subset of variables available in the checkpoint.
+
+            Inspects given checkpoint and returns the subset of variables that are
+            available in it.
+
+            (rathodv): force input and output to be a dictionary.
+
+            Args:
+              variables: a list or dictionary of variables to find in checkpoint.
+              checkpoint_path: path to the checkpoint to restore variables from.
+              include_global_step: whether to include `global_step` variable, if it
+                exists. Default True.
+
+            Returns:
+              A list or dictionary of variables.
+            Raises:
+              ValueError: if `variables` is not a list or dict.
+            """
+            # 类型判断，统一转换为字典类型
+            variables = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES)
+            if isinstance(variables, list):
+                variable_names_map = {}
+                for variable in variables:
+                    # if isinstance(variable, tf_variables.PartitionedVariable):
+                    #     name = variable.name
+                    # else:
+                    name = variable.op.name
+                    variable_names_map[name] = variable
+            elif isinstance(variables, dict):
+                variable_names_map = variables
+            else:
+                raise ValueError('`variables` is expected to be a list or dict.')
+
+            ckpt_reader = tf.train.NewCheckpointReader(checkpoint_path)
+            ckpt_vars_to_shape_map = ckpt_reader.get_variable_to_shape_map()
+            if not include_global_step:
+                ckpt_vars_to_shape_map.pop(tf.GraphKeys.GLOBAL_STEP, None)
+
+            vars_in_ckpt = {}
+            for variable_name, variable in sorted(variable_names_map.items()):
+                # 是否存在对应变量
+                if variable_name in ckpt_vars_to_shape_map:
+                    # 对应变量的shape是否一致
+                    if ckpt_vars_to_shape_map[variable_name] == variable.shape.as_list():
+                        vars_in_ckpt[variable_name] = variable
+                    else:
+                        logging.warning('Variable [%s] is available in checkpoint, but has an '
+                                        'incompatible shape with model variable. Checkpoint '
+                                        'shape: [%s], model variable shape: [%s]. This '
+                                        'variable will not be initialized from the checkpoint.',
+                                        variable_name, ckpt_vars_to_shape_map[variable_name],
+                                        variable.shape.as_list())
+                else:
+                    logging.warning('Variable [%s] is not available in checkpoint', variable_name)
+            # 与输入类型保持一致 输出list or dict
+            if isinstance(variables, list):
+                return list(vars_in_ckpt.values())
+            return vars_in_ckpt

@@ -81,7 +81,7 @@ def restore_map(include_scope_list=None):
         nor `detection`.
     """
 
-    variables_to_restore = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES) + tf.get_collection(tf.GraphKeys.SAVEABLE_OBJECTS)
+    variables_to_restore = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES)
     variables_to_restore.append(tf.train.get_or_create_global_step())
     include_patterns = include_scope_list
     feature_extractor_variables = filter_variables(variables_to_restore, include_patterns=include_patterns)

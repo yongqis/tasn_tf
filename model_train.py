@@ -75,7 +75,10 @@ def main():
     model_path = tf.train.latest_checkpoint(model_dir)
     if model_path:
         print('load ckpt from: %s.' % model_path)
-        saver.restore(sess, save_path=model_path)
+        var_map = net.resotre_map(model_path, include_global_step=True)
+        print(var_map)
+        init = tf.train.Saver(var_map)
+        init.restore(sess, save_path=model_path)
 
     while True:
             try:
